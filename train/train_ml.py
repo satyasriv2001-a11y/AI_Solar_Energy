@@ -181,8 +181,8 @@ def train_ml_model(
         'gpu_memory_used': gpu_memory_used,
         'train_time_sec': round(train_time, 2),
         'inference_time_sec': round(inference_time, 2),
-        'param_count':    X_train_flat.shape[1],
-        'samples_count':  len(final_preds_24h),  # Number of 24h-ahead predictions for CSV
+        'param_count':    X_train_flat.shape[1] * y_train_flat.shape[1] + y_train_flat.shape[1],  # Linear model: features * outputs + bias
+        'samples_count':  len(p_matrix),  # Number of test samples (days)
         'predictions':    final_preds_24h,  # 1D array of 24h-ahead predictions (for CSV)
         'y_true':         final_gt_24h,     # 1D array of corresponding ground truth (for CSV)
         'predictions_all': p_matrix,  # Full multi-step predictions (for potential detailed analysis)
