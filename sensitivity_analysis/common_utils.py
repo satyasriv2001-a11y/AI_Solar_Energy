@@ -159,7 +159,7 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
         # Get DL parameters from plant config
         dl_params = plant_config.get('dl_params', {}).get(complexity, {})
         config['train_params'] = {
-            'epochs': dl_params.get('epochs', 50),
+            'epochs': dl_params.get('epochs', 20 if complexity == 'low' else 50),
             'batch_size': dl_params.get('batch_size', 64),
             'learning_rate': dl_params.get('learning_rate', 0.001),
             'patience': dl_params.get('patience', 10),
@@ -167,18 +167,24 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
             'weight_decay': dl_params.get('weight_decay', 0.0001)
         }
         config['model_params'] = {
-            'd_model': dl_params.get('d_model', 32),
-            'hidden_dim': dl_params.get('hidden_dim', 16),
+            'd_model': dl_params.get('d_model', 16 if complexity == 'low' else 32),
+            'hidden_dim': dl_params.get('hidden_dim', 8 if complexity == 'low' else 16),
             'num_heads': dl_params.get('num_heads', 2),
-            'num_layers': dl_params.get('num_layers', 2),
+            'num_layers': dl_params.get('num_layers', 1 if complexity == 'low' else 2),
             'dropout': dl_params.get('dropout', 0.1),
             'tcn_channels': dl_params.get('tcn_channels', [8, 16] if complexity == 'low' else [16, 32]),
             'kernel_size': dl_params.get('kernel_size', 3)
         }
     elif model in ML_MODELS:
-        # Get ML parameters from plant config
+        # Get ML parameters from plant config (same as multi-plant)
         ml_params = plant_config.get('ml_params', {}).get(complexity, {})
-        config['model_params'] = ml_params
+        config['model_params'] = {
+            'n_estimators': ml_params.get('n_estimators', 10 if complexity == 'low' else 30),
+            'max_depth': ml_params.get('max_depth', 1 if complexity == 'low' else 3),
+            'learning_rate': ml_params.get('learning_rate', 0.2 if complexity == 'low' else 0.1),
+            'random_state': ml_params.get('random_state', 42),
+            'verbosity': ml_params.get('verbosity', -1)  # Silent mode: suppress warnings
+        }
     elif model == 'Linear':
         config['model_complexity'] = None
         config['model_params'] = {}
