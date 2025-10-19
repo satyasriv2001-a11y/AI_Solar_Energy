@@ -277,7 +277,7 @@ def train_dl_model(
         'param_count': count_parameters(model),
         'train_time_sec': total_train_time,
         'inference_time_sec': total_inference_time,
-        'samples_count': len(p_matrix),  # Number of test samples (days)
+        'samples_count': len(p_inv_matrix),  # Number of test samples (days)
         'predictions': final_preds_24h,  # 1D array of 24h-ahead predictions (for CSV)
         'y_true': final_gt_24h,          # 1D array of corresponding ground truth (for CSV)
         'predictions_all': p_inv_matrix,  # Full multi-step predictions (for potential analysis)
