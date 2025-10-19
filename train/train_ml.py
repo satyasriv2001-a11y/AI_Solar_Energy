@@ -182,7 +182,7 @@ def train_ml_model(
         'train_time_sec': round(train_time, 2),
         'inference_time_sec': round(inference_time, 2),
         'param_count':    X_train_flat.shape[1] * y_train_flat.shape[1] + y_train_flat.shape[1],  # Linear model: features * outputs + bias
-        'samples_count':  len(p_matrix) * p_matrix.shape[1],  # Number of test samples (total hours)
+        'samples_count':  int(len(p_matrix) * p_matrix.shape[1]),  # Number of test samples (total hours)
         'predictions':    final_preds_24h,  # 1D array of 24h-ahead predictions (for CSV)
         'y_true':         final_gt_24h,     # 1D array of corresponding ground truth (for CSV)
         'predictions_all': p_matrix,  # Full multi-step predictions (for potential detailed analysis)
