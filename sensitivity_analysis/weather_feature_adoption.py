@@ -38,7 +38,7 @@ from data.data_utils import load_raw_data, preprocess_features, create_daily_win
 FEATURE_TIERS = {
     'SI': 'solar_irradiance_only',
     'H': 'high_weather',
-    'H+M': 'medium_weather',
+    'H+M': 'all_weather',  # 使用all_weather作为基准，与其他实验保持一致
     'H+M+L': 'low_weather'
 }
 
