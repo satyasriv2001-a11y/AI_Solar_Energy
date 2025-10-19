@@ -81,9 +81,9 @@ def create_plant_config(csv_file, template_path='config/plant_template.yaml'):
     config['end_date'] = end_date
     
     # Keep default settings from template
-    # shuffle_split defaults to False (Sequential split)
+    # shuffle_split defaults to True (Random shuffle for robust evaluation)
     if 'shuffle_split' not in config:
-        config['shuffle_split'] = False
+        config['shuffle_split'] = True
     if 'random_seed' not in config:
         config['random_seed'] = 42
     if 'past_hours' not in config:
