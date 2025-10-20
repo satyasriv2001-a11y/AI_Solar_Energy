@@ -262,7 +262,12 @@ def run_actual_experiments(data_dir, output_dir, model='LSTM'):
         ]
         
         print(f"执行命令: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(f"⏳ 正在运行Weather Feature Adoption实验...")
+        print(f"📊 预计运行: 2厂 × 8模型 × 4特征层级 = 64个实验")
+        print(f"🕐 预计时间: 约5-10分钟")
+        print(f"💡 提示: 实验正在后台运行，请耐心等待...")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         
         if result.returncode == 0:
             print(f"✅ Weather Feature Adoption 实验成功")
@@ -306,7 +311,12 @@ def run_actual_experiments(data_dir, output_dir, model='LSTM'):
         ]
         
         print(f"执行命令: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(f"⏳ 正在运行Lookback Window实验...")
+        print(f"📊 预计运行: 2厂 × 7模型 × 4时间窗口 = 56个实验")
+        print(f"🕐 预计时间: 约5-10分钟")
+        print(f"💡 提示: 实验正在后台运行，请耐心等待...")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         
         if result.returncode == 0:
             print(f"✅ Lookback Window 实验成功")
