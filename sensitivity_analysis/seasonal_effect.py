@@ -109,6 +109,27 @@ def run_seasonal_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity
                     print(f"  Warning: Missing data for {model}")
                     continue
                 
+                # Store base metrics (overall performance)
+                base_mae = result['mae']
+                base_rmse = result['rmse']
+                base_r2 = result['r2']
+                base_nrmse = result.get('nrmse', compute_nrmse(y_test.flatten(), y_pred.flatten()))
+                train_time = result['train_time']
+                test_samples = result['test_samples']
+                
+                # Store base result
+                all_results.append({
+                    'plant_id': plant_id,
+                    'model': model,
+                    'season': 'Overall',
+                    'mae': base_mae,
+                    'rmse': base_rmse,
+                    'r2': base_r2,
+                    'nrmse': base_nrmse,
+                    'train_time': train_time,
+                    'samples': test_samples
+                })
+                
                 # Group test results by season
                 test_df = pd.DataFrame({
                     'y_true': y_test.flatten(),

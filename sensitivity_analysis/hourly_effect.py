@@ -112,6 +112,27 @@ def run_hourly_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity_a
                     print(f"  Warning: Missing data for {model}")
                     continue
                 
+                # Store base metrics (overall performance)
+                base_mae = result['mae']
+                base_rmse = result['rmse']
+                base_r2 = result['r2']
+                base_nrmse = result.get('nrmse', compute_nrmse(y_test.flatten(), y_pred.flatten()))
+                train_time = result['train_time']
+                test_samples = result['test_samples']
+                
+                # Store base result
+                all_results.append({
+                    'plant_id': plant_id,
+                    'model': model,
+                    'hour': 'Overall',
+                    'mae': base_mae,
+                    'rmse': base_rmse,
+                    'r2': base_r2,
+                    'nrmse': base_nrmse,
+                    'train_time': train_time,
+                    'samples': test_samples
+                })
+                
                 # Group test results by hour
                 # y_test and y_pred are (n_samples, 24) for daily windows
                 for hour_idx in range(24):
