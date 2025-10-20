@@ -26,6 +26,8 @@ from sensitivity_analysis.common_utils import (
     load_all_plant_configs,
     run_single_experiment,
     save_results, create_formatted_pivot
+,
+    set_global_seed
 )
 from data.data_utils import load_raw_data, preprocess_features
 
@@ -51,7 +53,11 @@ def run_training_scale_analysis(data_dir: str = 'data', output_dir: str = 'sensi
     print("Sensitivity Analysis Experiment 6: Training Dataset Scale")
     print("=" * 80)
     
-    # Load all plant configurations
+
+    # 设置全局随机种子确保可重复性
+    set_global_seed(42)
+
+        # Load all plant configurations
     plant_configs = load_all_plant_configs(data_dir)
     print(f"\nLoaded {len(plant_configs)} plant configurations")
     

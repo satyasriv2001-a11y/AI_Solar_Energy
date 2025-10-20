@@ -29,7 +29,8 @@ from sensitivity_analysis.common_utils import (
     create_base_config,
     load_all_plant_configs,
     run_single_experiment,
-    save_results, create_formatted_pivot
+    save_results, create_formatted_pivot,
+    set_global_seed
 )
 from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, split_data
 
@@ -54,6 +55,9 @@ def run_weather_feature_analysis(data_dir: str = 'data', output_dir: str = 'sens
     print("=" * 80)
     print("Sensitivity Analysis Experiment 3: Weather Feature Adoption")
     print("=" * 80)
+    
+    # 设置全局随机种子确保可重复性
+    set_global_seed(42)
     
     # Load all plant configurations
     plant_configs = load_all_plant_configs(data_dir)

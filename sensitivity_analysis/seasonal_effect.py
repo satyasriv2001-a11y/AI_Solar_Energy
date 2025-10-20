@@ -23,7 +23,8 @@ from sensitivity_analysis.common_utils import (
     DL_MODELS, ML_MODELS, ALL_MODELS_NO_LINEAR,
     get_season, compute_nrmse,
     create_base_config, run_single_experiment,
-    load_all_plant_configs, save_results, create_formatted_pivot
+    load_all_plant_configs, save_results, create_formatted_pivot,
+    set_global_seed
 )
 from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, split_data
 
@@ -39,6 +40,9 @@ def run_seasonal_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity
     print("=" * 80)
     print("Sensitivity Analysis Experiment 1: Seasonal Effect")
     print("=" * 80)
+    
+    # 设置全局随机种子确保可重复性
+    set_global_seed(42)
     
     # Load all plant configurations
     plant_configs = load_all_plant_configs(data_dir)

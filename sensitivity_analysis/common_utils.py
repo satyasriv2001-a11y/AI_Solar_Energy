@@ -60,6 +60,37 @@ os.environ['LIGHTGBM_VERBOSE'] = '0'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config_manager import PlantConfigManager
+
+
+def set_global_seed(seed=42):
+    """
+    设置全局随机种子确保完全可重复性
+    
+    Args:
+        seed: 随机种子值
+    """
+    import random
+    import torch
+    
+    # Python随机种子
+    random.seed(seed)
+    
+    # NumPy随机种子
+    np.random.seed(seed)
+    
+    # PyTorch随机种子
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    
+    # 确保PyTorch的确定性行为
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # 设置环境变量
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"🎲 已设置全局随机种子: {seed}")
 from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, create_sliding_windows, split_data
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
@@ -206,6 +237,10 @@ def run_single_experiment(config: Dict, df: pd.DataFrame, use_sliding_windows: b
         Result dictionary with metrics and predictions
     """
     import time
+    
+    # 设置随机种子确保可重复性
+    random_seed = config.get('random_seed', 42)
+    set_global_seed(random_seed)
     
     try:
         # Data preprocessing (same as multi-plant)
