@@ -42,15 +42,15 @@ def get_weather_features_by_category(weather_category):
     Return weather features based on category
     
     Args:
-        weather_category: 'none', 'all_weather', 'solar_irradiance_only', 'high_weather', 'medium_weather', 'low_weather'
+        weather_category: 'none', 'medium_weather', 'solar_irradiance_only', 'high_weather', 'medium_weather', 'low_weather'
     
     Returns:
         list: List of selected weather features
     """
     if weather_category == 'none':
         return []  # Return no weather features
-    elif weather_category == 'all_weather':
-        return ALL_WEATHER_FEATURES
+    elif weather_category == 'medium_weather':
+        return MEDIUM_WEATHER_FEATURES
     elif weather_category == 'solar_irradiance_only':
         return SOLAR_IRRADIANCE_FEATURES
     elif weather_category == 'high_weather':

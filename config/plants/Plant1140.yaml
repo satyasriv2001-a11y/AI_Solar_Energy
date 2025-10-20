@@ -14,7 +14,7 @@ start_date: '2022-01-01'
 test_ratio: 0.1
 train_ratio: 0.8
 val_ratio: 0.1
-weather_category: all_weather
+weather_category: medium_weather
 shuffle_split: false
 random_seed: 42
 past_hours: 24

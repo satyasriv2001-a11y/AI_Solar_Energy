@@ -83,6 +83,8 @@ def run_lookback_window_analysis(data_dir: str = 'data', output_dir: str = 'sens
                 # Create configuration: PV+NWP, lookback hours, no TE, high complexity
                 config = create_base_config(plant_config, model, complexity='high', 
                                           lookback=lookback, use_te=False)
+                # Set weather category to medium_weather (7 features) to match H+M baseline
+                config['weather_category'] = 'medium_weather'
                 
                 try:
                     # Train and evaluate

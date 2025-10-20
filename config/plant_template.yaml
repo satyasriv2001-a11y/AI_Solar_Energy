@@ -23,7 +23,7 @@ val_ratio: 0.1    # 10% of data
 test_ratio: 0.1   # 10% of data
 
 # Weather Feature Category (adjust based on data availability)
-weather_category: "all_weather"  # Options: "all_weather", "irradiance", "temperature", "none"
+weather_category: "medium_weather"  # Options: "medium_weather", "irradiance", "temperature", "none"
 
 # Support Ideal NWP (set based on data availability)
 has_ideal_nwp: true  # Set to true if actual weather data is available

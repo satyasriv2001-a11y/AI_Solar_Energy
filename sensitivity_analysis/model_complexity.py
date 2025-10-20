@@ -58,7 +58,7 @@ def create_complexity_config(plant_config, model, complexity, lookback=24, use_t
         'test_ratio': plant_config.get('test_ratio', 0.1),
         'shuffle_split': True,
         'random_seed': plant_config.get('random_seed', 42),
-        'weather_category': plant_config.get('weather_category', 'all_weather'),
+        'weather_category': plant_config.get('weather_category', 'medium_weather'),
         'start_date': plant_config.get('start_date', '2022-01-01'),
         'end_date': plant_config.get('end_date', '2024-09-28'),
         'save_options': {

@@ -350,7 +350,7 @@ def create_new_plant_config(plant_id: str, data_path: str, start_date: str, end_
         'test_ratio': 0.1,
         'shuffle_split': True,  # Random shuffle for robust evaluation
         'random_seed': 42,  # Fixed seed for reproducibility
-        'weather_category': "all_weather",
+        'weather_category': "medium_weather",
         'has_ideal_nwp': True,
         'results_base_dir': "results",
         'save_options': {

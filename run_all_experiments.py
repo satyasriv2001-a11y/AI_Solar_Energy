@@ -109,7 +109,7 @@ def create_config(data_path, model, complexity, lookback, feat_combo, use_te, is
         'use_forecast': feat_combo['use_forecast'],
         'use_ideal_nwp': feat_combo['use_ideal_nwp'],
         'use_time_encoding': use_te,
-        'weather_category': 'all_weather',
+        'weather_category': 'medium_weather',
         'future_hours': 24,
         'start_date': '2022-01-01',
         'end_date': '2024-09-28',

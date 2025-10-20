@@ -143,7 +143,7 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
         'test_ratio': plant_config.get('test_ratio', 0.1),
         'shuffle_split': plant_config.get('shuffle_split', True),
         'random_seed': plant_config.get('random_seed', 42),
-        'weather_category': plant_config.get('weather_category', 'all_weather'),
+        'weather_category': plant_config.get('weather_category', 'medium_weather'),
         'start_date': plant_config.get('start_date', '2022-01-01'),
         'end_date': plant_config.get('end_date', '2024-09-28'),
         'save_options': {
@@ -404,7 +404,7 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
             'val_ratio': 0.1,
             'test_ratio': 0.1,
             'random_seed': 42,
-            'weather_category': 'all_weather',
+            'weather_category': 'medium_weather',
             'start_date': '2022-01-01',
             'end_date': '2024-09-28',
             # DL parameters - 与multiplant保持一致
