@@ -16,6 +16,32 @@ warnings.filterwarnings('ignore')
 os.environ['PYTHONWARNINGS'] = 'ignore'
 os.environ['LIGHTGBM_VERBOSE'] = '0'
 
+# 设置全局随机种子确保完全可重复性
+def set_global_seed(seed=42):
+    """设置所有随机种子确保完全可重复性"""
+    import random
+    import torch
+    
+    # Python随机种子
+    random.seed(seed)
+    
+    # NumPy随机种子
+    np.random.seed(seed)
+    
+    # PyTorch随机种子
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    
+    # 确保PyTorch的确定性行为
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # 设置环境变量
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"🎲 已设置全局随机种子: {seed}")
+
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -184,8 +210,8 @@ def quick_test_single_plant(plant_id, data_path, model='LSTM'):
     print(f"   数据分割: {config_h_m['shuffle_split']}")
     print(f"   ⏳ 开始训练...")
     
-    # 设置随机种子确保可重复性
-    np.random.seed(config_h_m['random_seed'])
+    # 重新设置随机种子确保实验间的一致性
+    set_global_seed(config_h_m['random_seed'])
     
     # 调试数据处理过程
     debug_data_h_m = debug_data_processing(config_h_m, df.copy(), "Weather H+M")
@@ -216,8 +242,8 @@ def quick_test_single_plant(plant_id, data_path, model='LSTM'):
     print(f"   数据分割: {config_lookback['shuffle_split']}")
     print(f"   ⏳ 开始训练...")
     
-    # 设置随机种子确保可重复性
-    np.random.seed(config_lookback['random_seed'])
+    # 重新设置随机种子确保实验间的一致性
+    set_global_seed(config_lookback['random_seed'])
     
     # 调试数据处理过程
     debug_data_lookback = debug_data_processing(config_lookback, df.copy(), "Lookback 24h")
@@ -318,6 +344,9 @@ def main():
     print("=" * 80)
     print("🚀 快速Sensitivity一致性测试 - LSTM模型")
     print("=" * 80)
+    
+    # 设置全局随机种子确保完全可重复性
+    set_global_seed(42)
     
     # 查找CSV文件
     data_dir = 'data'
