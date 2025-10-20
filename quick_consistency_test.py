@@ -22,7 +22,77 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from sensitivity_analysis.common_utils import (
     create_base_config, run_single_experiment, load_all_plant_configs
 )
-from data.data_utils import load_raw_data, get_weather_features_by_category
+from data.data_utils import load_raw_data, get_weather_features_by_category, preprocess_features, create_daily_windows, split_data
+
+
+def debug_data_processing(config, df, experiment_name):
+    """
+    调试数据处理过程
+    """
+    print(f"\n🔍 调试 {experiment_name} 数据处理过程:")
+    
+    # 数据预处理
+    print(f"   1. 数据预处理...")
+    df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
+    print(f"     历史特征: {len(hist_feats)} 个 - {hist_feats}")
+    print(f"     预测特征: {len(fcst_feats)} 个 - {fcst_feats}")
+    print(f"     无历史功率: {no_hist_power}")
+    
+    # 创建窗口
+    print(f"   2. 创建窗口...")
+    past_hours = config.get('past_hours', 24)
+    X_hist, X_fcst, y, hours, dates = create_daily_windows(
+        df_clean, config['future_hours'], hist_feats, fcst_feats, no_hist_power, past_hours
+    )
+    print(f"     历史数据形状: {X_hist.shape}")
+    print(f"     预测数据形状: {X_fcst.shape if X_fcst is not None else 'None'}")
+    print(f"     目标数据形状: {y.shape}")
+    print(f"     总样本数: {len(X_hist)}")
+    
+    # 数据分割
+    print(f"   3. 数据分割...")
+    total_samples = len(X_hist)
+    indices = np.arange(total_samples)
+    
+    shuffle_split = config.get('shuffle_split', True)
+    random_seed = config.get('random_seed', 42)
+    
+    if shuffle_split:
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+        print(f"     随机种子: {random_seed}, 已打乱数据")
+    else:
+        print(f"     未打乱数据")
+    
+    train_ratio = config.get('train_ratio', 0.8)
+    val_ratio = config.get('val_ratio', 0.1)
+    
+    train_size = int(total_samples * train_ratio)
+    val_size = int(total_samples * val_ratio)
+    
+    train_idx = indices[:train_size]
+    val_idx = indices[train_size:train_size + val_size]
+    test_idx = indices[train_size + val_size:]
+    
+    print(f"     训练集: {len(train_idx)} 样本")
+    print(f"     验证集: {len(val_idx)} 样本")
+    print(f"     测试集: {len(test_idx)} 样本")
+    
+    # 检查测试集数据
+    y_test = y[test_idx]
+    print(f"     测试集目标值范围: {y_test.min():.4f} - {y_test.max():.4f}")
+    print(f"     测试集目标值均值: {y_test.mean():.4f}")
+    print(f"     测试集目标值标准差: {y_test.std():.4f}")
+    
+    return {
+        'X_hist': X_hist,
+        'X_fcst': X_fcst,
+        'y': y,
+        'train_idx': train_idx,
+        'val_idx': val_idx,
+        'test_idx': test_idx,
+        'y_test': y_test
+    }
 
 
 def quick_test_single_plant(plant_id, data_path, model='LSTM'):
@@ -75,13 +145,50 @@ def quick_test_single_plant(plant_id, data_path, model='LSTM'):
     
     print(f"✅ 配置创建完成")
     
+    # 详细比较配置
+    print(f"\n🔍 详细配置比较:")
+    print(f"   Weather H+M 配置:")
+    for key, value in config_h_m.items():
+        print(f"     {key}: {value}")
+    
+    print(f"\n   Lookback 24h 配置:")
+    for key, value in config_lookback.items():
+        print(f"     {key}: {value}")
+    
+    # 检查配置是否完全相同
+    configs_equal = True
+    print(f"\n🔍 配置差异检查:")
+    for key in config_h_m:
+        if key in config_lookback:
+            if config_h_m[key] != config_lookback[key]:
+                print(f"   ❌ {key}: H+M={config_h_m[key]} vs Lookback={config_lookback[key]}")
+                configs_equal = False
+            else:
+                print(f"   ✅ {key}: {config_h_m[key]}")
+        else:
+            print(f"   ⚠️  {key}: 只在H+M中存在")
+            configs_equal = False
+    
+    if configs_equal:
+        print(f"\n✅ 配置完全相同!")
+    else:
+        print(f"\n❌ 配置存在差异!")
+    
     # 运行实验1: Weather H+M
     print(f"\n🧪 实验1: Weather H+M (medium_weather)")
     print(f"   模型: {config_h_m['model']}")
     print(f"   复杂度: {config_h_m['model_complexity']}")
     print(f"   特征: {config_h_m['weather_category']} ({len(features)}个)")
     print(f"   回看窗口: {config_h_m['past_hours']}h")
+    print(f"   随机种子: {config_h_m['random_seed']}")
+    print(f"   数据分割: {config_h_m['shuffle_split']}")
     print(f"   ⏳ 开始训练...")
+    
+    # 设置随机种子确保可重复性
+    np.random.seed(config_h_m['random_seed'])
+    
+    # 调试数据处理过程
+    debug_data_h_m = debug_data_processing(config_h_m, df.copy(), "Weather H+M")
     
     try:
         result_h_m = run_single_experiment(config_h_m, df.copy(), use_sliding_windows=False)
@@ -105,7 +212,15 @@ def quick_test_single_plant(plant_id, data_path, model='LSTM'):
     print(f"   复杂度: {config_lookback['model_complexity']}")
     print(f"   特征: {config_lookback['weather_category']} ({len(features)}个)")
     print(f"   回看窗口: {config_lookback['past_hours']}h")
+    print(f"   随机种子: {config_lookback['random_seed']}")
+    print(f"   数据分割: {config_lookback['shuffle_split']}")
     print(f"   ⏳ 开始训练...")
+    
+    # 设置随机种子确保可重复性
+    np.random.seed(config_lookback['random_seed'])
+    
+    # 调试数据处理过程
+    debug_data_lookback = debug_data_processing(config_lookback, df.copy(), "Lookback 24h")
     
     try:
         result_lookback = run_single_experiment(config_lookback, df.copy(), use_sliding_windows=False)
@@ -122,6 +237,35 @@ def quick_test_single_plant(plant_id, data_path, model='LSTM'):
     except Exception as e:
         print(f"   ❌ 实验2错误: {e}")
         return None
+    
+    # 比较测试集数据
+    print(f"\n🔍 测试集数据比较:")
+    y_test_h_m = debug_data_h_m['y_test']
+    y_test_lookback = debug_data_lookback['y_test']
+    
+    print(f"   Weather H+M 测试集:")
+    print(f"     样本数: {len(y_test_h_m)}")
+    print(f"     范围: {y_test_h_m.min():.6f} - {y_test_h_m.max():.6f}")
+    print(f"     均值: {y_test_h_m.mean():.6f}")
+    print(f"     标准差: {y_test_h_m.std():.6f}")
+    
+    print(f"   Lookback 24h 测试集:")
+    print(f"     样本数: {len(y_test_lookback)}")
+    print(f"     范围: {y_test_lookback.min():.6f} - {y_test_lookback.max():.6f}")
+    print(f"     均值: {y_test_lookback.mean():.6f}")
+    print(f"     标准差: {y_test_lookback.std():.6f}")
+    
+    # 检查测试集是否相同
+    test_data_same = np.array_equal(y_test_h_m, y_test_lookback)
+    print(f"   测试集数据相同: {test_data_same}")
+    
+    if not test_data_same:
+        diff_count = np.sum(y_test_h_m != y_test_lookback)
+        print(f"   不同样本数: {diff_count} / {len(y_test_h_m)}")
+        if diff_count < 10:  # 只显示前几个不同的值
+            diff_indices = np.where(y_test_h_m != y_test_lookback)[0][:5]
+            for idx in diff_indices:
+                print(f"     样本 {idx}: H+M={y_test_h_m[idx]:.6f}, Lookback={y_test_lookback[idx]:.6f}")
     
     # 比较结果
     print(f"\n📊 结果对比:")
