@@ -119,29 +119,13 @@ def run_weather_feature_analysis(data_dir: str = 'data', output_dir: str = 'sens
                         print(f"  Error running {model} - {tier_name}: {result.get('error', 'Unknown error')}")
                         continue
                     
-                    # Get predictions and test data
-                    y_pred = result.get('y_test_pred')
-                    y_test = result.get('y_test')
-                    
-                    if y_pred is None or y_test is None:
-                        print(f"  Warning: Missing data for {model} - {tier_name}")
-                        continue
-                    
-                    # Compute metrics on test set
-                    y_true_flat = y_test.flatten()
-                    y_pred_flat = y_pred.flatten()
-                    
-                    # Compute metrics
-                    mae = np.mean(np.abs(y_true_flat - y_pred_flat))
-                    rmse = np.sqrt(np.mean((y_true_flat - y_pred_flat) ** 2))
-                    
-                    # R2
-                    ss_res = np.sum((y_true_flat - y_pred_flat) ** 2)
-                    ss_tot = np.sum((y_true_flat - np.mean(y_true_flat)) ** 2)
-                    r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
-                    
-                    # NRMSE
-                    nrmse = compute_nrmse(y_true_flat, y_pred_flat)
+                    # Extract metrics directly from result (same as lookback_window.py)
+                    mae = result['mae']
+                    rmse = result['rmse']
+                    r2 = result['r2']
+                    nrmse = result.get('nrmse', compute_nrmse(result['y_test'].flatten(), result['y_test_pred'].flatten()))
+                    train_time = result['train_time']
+                    test_samples = result['test_samples']
                     
                     # Store result
                     all_results.append({
@@ -152,8 +136,8 @@ def run_weather_feature_analysis(data_dir: str = 'data', output_dir: str = 'sens
                         'rmse': rmse,
                         'r2': r2,
                         'nrmse': nrmse,
-                        'train_time': result.get('train_time', 0),
-                        'samples': len(y_true_flat)
+                        'train_time': train_time,
+                        'samples': test_samples
                     })
                     
                 except Exception as e:
