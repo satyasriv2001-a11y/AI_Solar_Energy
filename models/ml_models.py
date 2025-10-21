@@ -233,6 +233,10 @@ def train_lgbm(X_train, y_train, params: dict):
         })
         base = LGBMRegressor(**gpu_params)
         
+        # Suppress LightGBM warnings
+        import warnings
+        warnings.filterwarnings('ignore', category=UserWarning)
+        
         start_time = time.time()
         model = MultiOutputRegressor(base, n_jobs=1)  # Sequential to avoid OOM
         model.fit(X_train, y_train)
