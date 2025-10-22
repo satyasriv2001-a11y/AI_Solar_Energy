@@ -22,34 +22,23 @@ os.environ['PYTHONWARNINGS'] = 'ignore'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Google Drive integration
-def mount_google_drive():
-    """
-    Mount Google Drive in Colab environment
-    """
-    try:
-        from google.colab import drive
-        drive.mount('/content/drive')
-        print("Google Drive mounted successfully at /content/drive")
-        return True
-    except ImportError:
-        print("Not running in Colab environment, skipping Drive mount")
-        return False
-    except Exception as e:
-        print(f"Failed to mount Google Drive: {e}")
-        return False
-
 def is_drive_path(path: str) -> bool:
     """
     Check if path is a Google Drive path
     """
     return path and path.startswith('/content/drive/')
 
-def ensure_drive_mounted(output_dir: str = None) -> bool:
+def check_drive_path(output_dir: str = None) -> bool:
     """
-    Ensure Google Drive is mounted if using Drive paths
+    Check if Drive path exists (assumes Drive is already mounted)
     """
     if output_dir and is_drive_path(output_dir):
-        return mount_google_drive()
+        if not os.path.exists(output_dir):
+            print(f"Warning: Drive path does not exist: {output_dir}")
+            print("Please ensure Google Drive is mounted manually")
+            return False
+        else:
+            print(f"Drive path detected and accessible: {output_dir}")
     return True
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -220,9 +209,8 @@ def check_plant_completion(plant_id: str, output_dir: str = None) -> tuple:
     if output_dir is None:
         output_dir = script_dir
     
-    # Ensure Drive is mounted if using Drive paths
-    if not ensure_drive_mounted(output_dir):
-        print(f"  Warning: Failed to mount Drive for path: {output_dir}")
+    # Check Drive path if using Drive paths
+    if not check_drive_path(output_dir):
         return False, 0, None
     
     # Check for result file for this plant
@@ -280,9 +268,8 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
     if output_dir is None:
         output_dir = script_dir
     else:
-        # Ensure Drive is mounted if using Drive paths
-        if not ensure_drive_mounted(output_dir):
-            print(f"Error: Failed to mount Drive for path: {output_dir}")
+        # Check Drive path if using Drive paths
+        if not check_drive_path(output_dir):
             return 0
         
         # Create directory if it doesn't exist
@@ -460,9 +447,8 @@ def run_all_plants(resume: bool = True, skip: int = 0, max_plants: int = None,
     if output_dir is None:
         output_dir = script_dir
     else:
-        # Ensure Drive is mounted if using Drive paths
-        if not ensure_drive_mounted(output_dir):
-            print(f"Error: Failed to mount Drive for path: {output_dir}")
+        # Check Drive path if using Drive paths
+        if not check_drive_path(output_dir):
             return
         
         # Create directory if it doesn't exist
@@ -601,7 +587,7 @@ Examples:
     parser.add_argument('--output-dir', type=str, default=None,
                        help='Directory to save results (default: current directory). '
                             'For Colab/Drive (use quotes): "/content/drive/MyDrive/Solar PV electricity/results". '
-                            'Automatically mounts Google Drive if Drive path is detected.')
+                            'Note: Ensure Google Drive is manually mounted before using Drive paths.')
     
     args = parser.parse_args()
     
