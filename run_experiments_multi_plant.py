@@ -3,6 +3,7 @@
 """
 Multi-Plant Experiment Runner - Batch run 284 experiments for multiple plants
 Uses unified configuration system for easy management and reusability
+Supports Google Drive integration for Colab environments
 """
 
 import pandas as pd
@@ -19,6 +20,37 @@ warnings.filterwarnings('ignore')
 # Suppress warnings
 os.environ['PYTHONWARNINGS'] = 'ignore'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+# Google Drive integration
+def mount_google_drive():
+    """
+    Mount Google Drive in Colab environment
+    """
+    try:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        print("Google Drive mounted successfully at /content/drive")
+        return True
+    except ImportError:
+        print("Not running in Colab environment, skipping Drive mount")
+        return False
+    except Exception as e:
+        print(f"Failed to mount Google Drive: {e}")
+        return False
+
+def is_drive_path(path: str) -> bool:
+    """
+    Check if path is a Google Drive path
+    """
+    return path and path.startswith('/content/drive/')
+
+def ensure_drive_mounted(output_dir: str = None) -> bool:
+    """
+    Ensure Google Drive is mounted if using Drive paths
+    """
+    if output_dir and is_drive_path(output_dir):
+        return mount_google_drive()
+    return True
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
@@ -180,7 +212,7 @@ def check_plant_completion(plant_id: str, output_dir: str = None) -> tuple:
     
     Args:
         plant_id: Plant ID
-        output_dir: Directory to check for results
+        output_dir: Directory to check for results (supports Drive paths)
         
     Returns:
         (is_complete, completed_count, result_file_path)
@@ -188,13 +220,20 @@ def check_plant_completion(plant_id: str, output_dir: str = None) -> tuple:
     if output_dir is None:
         output_dir = script_dir
     
+    # Ensure Drive is mounted if using Drive paths
+    if not ensure_drive_mounted(output_dir):
+        print(f"  Warning: Failed to mount Drive for path: {output_dir}")
+        return False, 0, None
+    
     # Check for result file for this plant
     if not os.path.exists(output_dir):
+        print(f"  Warning: Output directory does not exist: {output_dir}")
         return False, 0, None
     
     result_file = os.path.join(output_dir, f"results_{plant_id}.csv")
     
     if not os.path.exists(result_file):
+        print(f"  Info: Result file not found: {result_file}")
         return False, 0, None
     
     try:
@@ -208,6 +247,7 @@ def check_plant_completion(plant_id: str, output_dir: str = None) -> tuple:
             completed = len(df[df['experiment_name'].notna()])
         
         is_complete = (completed >= 284)
+        print(f"  Found {completed}/284 completed experiments in {result_file}")
         return is_complete, completed, result_file
     
     except Exception as e:
@@ -222,7 +262,7 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
     Args:
         plant_config_path: Plant configuration file path
         resume: Whether to support resume from checkpoint
-        output_dir: Directory to save results (default: current directory)
+        output_dir: Directory to save results (supports Drive paths)
         
     Returns:
         Number of successful experiments
@@ -240,7 +280,18 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
     if output_dir is None:
         output_dir = script_dir
     else:
-        os.makedirs(output_dir, exist_ok=True)
+        # Ensure Drive is mounted if using Drive paths
+        if not ensure_drive_mounted(output_dir):
+            print(f"Error: Failed to mount Drive for path: {output_dir}")
+            return 0
+        
+        # Create directory if it doesn't exist
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            print(f"Output directory: {output_dir}")
+        except Exception as e:
+            print(f"Error creating output directory {output_dir}: {e}")
+            return 0
     
     # Check if already complete
     is_complete, completed_count, existing_file = check_plant_completion(plant_id, output_dir)
@@ -409,9 +460,21 @@ def run_all_plants(resume: bool = True, skip: int = 0, max_plants: int = None,
     if output_dir is None:
         output_dir = script_dir
     else:
-        os.makedirs(output_dir, exist_ok=True)
+        # Ensure Drive is mounted if using Drive paths
+        if not ensure_drive_mounted(output_dir):
+            print(f"Error: Failed to mount Drive for path: {output_dir}")
+            return
+        
+        # Create directory if it doesn't exist
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Error creating output directory {output_dir}: {e}")
+            return
     
     print(f"\nOutput directory: {output_dir}")
+    if is_drive_path(output_dir):
+        print("  (Google Drive path detected)")
     print(f"\n{'='*80}")
     print(f"Plants to process: {len(filtered_plants)}")
     print(f"{'='*80}")
@@ -514,6 +577,12 @@ Examples:
   
   # Scan status only
   python run_experiments_multi_plant.py --status-only
+  
+  # Use Google Drive for results (Colab)
+  python run_experiments_multi_plant.py --output-dir "/content/drive/MyDrive/Solar PV electricity/results"
+  
+  # Check status from Drive
+  python run_experiments_multi_plant.py --status-only --output-dir "/content/drive/MyDrive/Solar PV electricity/results"
         """
     )
     
@@ -531,7 +600,8 @@ Examples:
                        help='Only show status without running experiments')
     parser.add_argument('--output-dir', type=str, default=None,
                        help='Directory to save results (default: current directory). '
-                            'For Colab/Drive (use quotes): "/content/drive/MyDrive/Solar PV electricity/results"')
+                            'For Colab/Drive (use quotes): "/content/drive/MyDrive/Solar PV electricity/results". '
+                            'Automatically mounts Google Drive if Drive path is detected.')
     
     args = parser.parse_args()
     
