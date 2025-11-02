@@ -39,8 +39,8 @@ from data.data_utils import load_raw_data, preprocess_features, create_daily_win
 FEATURE_TIERS = {
     'SI': 'solar_irradiance_only',
     'H': 'high_weather',
-    'H+M': 'medium_weather',  # 7个特征：high + medium
-    'H+M+L': 'low_weather'    # 11个特征：high + medium + low
+    'H+M': 'medium_weather',  # 7 features: high + medium
+    'H+M+L': 'low_weather'    # 11 features: high + medium + low
 }
 
 
@@ -56,7 +56,7 @@ def run_weather_feature_analysis(data_dir: str = 'data', output_dir: str = 'sens
     print("Sensitivity Analysis Experiment 3: Weather Feature Adoption")
     print("=" * 80)
     
-    # 设置全局随机种子确保可重复性
+    # Set global random seed for reproducibility
     set_global_seed(42)
     
     # Load all plant configurations

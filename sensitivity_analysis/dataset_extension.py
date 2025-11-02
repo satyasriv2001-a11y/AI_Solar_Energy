@@ -48,7 +48,7 @@ def run_dataset_extension_analysis(data_dir: str = 'data', output_dir: str = 'se
     print("=" * 80)
     
 
-    # 设置全局随机种子确保可重复性
+    # Set global random seed for reproducibility
     set_global_seed(42)
 
         # Load all plant configurations

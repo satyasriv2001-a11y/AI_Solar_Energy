@@ -64,33 +64,33 @@ from config_manager import PlantConfigManager
 
 def set_global_seed(seed=42):
     """
-    设置全局随机种子确保完全可重复性
+    Set global random seed for full reproducibility
     
     Args:
-        seed: 随机种子值
+        seed: Random seed value
     """
     import random
     import torch
     
-    # Python随机种子
+    # Python random seed
     random.seed(seed)
     
-    # NumPy随机种子
+    # NumPy random seed
     np.random.seed(seed)
     
-    # PyTorch随机种子
+    # PyTorch random seed
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     
-    # 确保PyTorch的确定性行为
+    # Ensure PyTorch deterministic behavior
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     
-    # 设置环境变量
+    # Set environment variable
     os.environ['PYTHONHASHSEED'] = str(seed)
     
-    print(f"🎲 已设置全局随机种子: {seed}")
+    print(f"Set global random seed: {seed}")
 from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, create_sliding_windows, split_data
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
@@ -238,7 +238,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame, use_sliding_windows: b
     """
     import time
     
-    # 设置随机种子确保可重复性
+    # Set random seed for reproducibility
     random_seed = config.get('random_seed', 42)
     set_global_seed(random_seed)
     
@@ -442,7 +442,7 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
             'weather_category': 'medium_weather',
             'start_date': '2022-01-01',
             'end_date': '2024-09-28',
-            # DL parameters - 与multiplant保持一致
+            # DL parameters - consistent with multiplant
             'dl_params': {
                 'low': {
                     'epochs': 20,
@@ -505,7 +505,7 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
                     'kernel_size': 3
                 }
             },
-            # ML parameters - 与multiplant保持一致
+            # ML parameters - consistent with multiplant
             'ml_params': {
                 'low': {
                     'n_estimators': 10,

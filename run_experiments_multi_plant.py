@@ -161,7 +161,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
             'rmse': metrics.get('rmse', 0.0),
             'r2': metrics.get('r2', 0.0),
             'nrmse': metrics.get('nrmse', 0.0),
-            'train_time_sec': metrics.get('train_time_sec', round(training_time, 2)),  # 优先使用metrics中的值
+            'train_time_sec': metrics.get('train_time_sec', round(training_time, 2)),  # Prefer value from metrics
             'test_samples': metrics.get('samples_count', 0),
             'best_epoch': int(metrics.get('best_epoch', 0)) if not np.isnan(metrics.get('best_epoch', 0)) else 0,
             'param_count': int(metrics.get('param_count', 0)),

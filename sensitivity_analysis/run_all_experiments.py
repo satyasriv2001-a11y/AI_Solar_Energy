@@ -42,7 +42,7 @@ def run_all_experiments(data_dir='data', output_dir='sensitivity_analysis/result
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
     
-    # 设置全局随机种子确保所有实验可重复
+    # Set global random seed for reproducibility across all experiments
     set_global_seed(42)
     
     # Create output directory

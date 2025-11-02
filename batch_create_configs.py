@@ -162,7 +162,7 @@ def batch_create_configs(data_dir='data', output_dir='config/plants', template='
     
     print("\nNext steps:")
     print("  1. Check configs: ls config/plants/")
-    print("  2. Test single plant: python run_all_experiments.py")
+    print("  2. Test single plant: python run_main_experiments.py")
     print("  3. Run all plants: python run_experiments_multi_plant.py")
     print("="*80)
 

@@ -50,7 +50,7 @@ python batch_create_configs.py
 
 ```bash
 # Single plant (284 experiments, ~2-3 hours on GPU)
-python run_all_experiments.py
+python run_main_experiments.py
 
 # Multiple plants (batch processing)
 python run_experiments_multi_plant.py
@@ -178,7 +178,7 @@ PV-Forecasting/
 ├── train/                             # Training pipelines
 ├── eval/                              # Evaluation utilities
 ├── utils/                             # GPU utils
-├── run_all_experiments.py            # Single plant runner
+├── run_main_experiments.py           # Single plant runner
 ├── run_experiments_multi_plant.py    # Multi-plant batch runner
 ├── batch_create_configs.py           # Auto config generator
 ├── check_all_plants_status.py        # Status checker
