@@ -409,6 +409,7 @@ def aggregate_results(results: List[Dict], group_by: str = None) -> pd.DataFrame
 def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
     """
     Load all plant configurations from CSV files in data directory
+    Tries to load from config files first, then falls back to auto-detection
     
     Args:
         data_dir: Directory containing CSV files
@@ -426,120 +427,194 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
     csv_files = [f for f in os.listdir(data_dir) if f.endswith('.csv')]
     print(f"Found {len(csv_files)} CSV files in {data_dir}")
     
-    for csv_file in csv_files:
-        # Extract plant ID from filename (e.g., Project1140.csv -> 1140)
-        plant_id = csv_file.replace('Project', '').replace('.csv', '')
+    # Try to use PlantConfigManager to load configs if available
+    try:
+        manager = PlantConfigManager()
+        config_dir = 'config/plants'
         
-        # Create minimal plant config
-        plant_config = {
-            'plant_id': plant_id,
-            'data_path': os.path.join(data_dir, csv_file),
-            'future_hours': 24,
-            'train_ratio': 0.8,
-            'val_ratio': 0.1,
-            'test_ratio': 0.1,
-            'random_seed': 42,
-            'shuffle_split': True,  # Default to shuffle for robust evaluation
-            'weather_category': 'medium_weather',
-            'start_date': '2022-01-01',
-            'end_date': '2024-09-28',
-            # DL parameters - consistent with multiplant
-            'dl_params': {
-                'low': {
-                    'epochs': 20,
-                    'batch_size': 64,
-                    'learning_rate': 0.001,
-                    'patience': 10,
-                    'min_delta': 0.001,
-                    'weight_decay': 0.0001,
-                    'd_model': 16,
-                    'hidden_dim': 8,
-                    'num_heads': 2,
-                    'num_layers': 1,
-                    'dropout': 0.1,
-                    'tcn_channels': [8, 16],
-                    'kernel_size': 3
+        for csv_file in csv_files:
+            # Extract plant ID from filename (e.g., Project1140.csv -> 1140)
+            plant_id = csv_file.replace('Project', '').replace('.csv', '').replace('Plant', '').replace('plant', '')
+            
+            config_path = os.path.join(config_dir, f'Plant{plant_id}.yaml')
+            
+            if os.path.exists(config_path):
+                # Load from config file (same as multi_plant)
+                try:
+                    plant_config = manager.load_plant_config(config_path)
+                    plant_config['data_path'] = os.path.join(data_dir, csv_file)  # Use actual data path
+                    plant_configs.append(plant_config)
+                    continue
+                except Exception as e:
+                    print(f"  Warning: Failed to load config for {plant_id}: {e}, using auto-detection")
+            
+            # Fall back to auto-detection from data file
+            data_path = os.path.join(data_dir, csv_file)
+            
+            # Auto-detect date range from data file
+            try:
+                df = pd.read_csv(data_path)
+                if all(col in df.columns for col in ['Year', 'Month', 'Day', 'Hour']):
+                    df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
+                    start_date = df['Datetime'].min().strftime('%Y-%m-%d')
+                    end_date = df['Datetime'].max().strftime('%Y-%m-%d')
+                else:
+                    start_date = '2022-01-01'
+                    end_date = '2024-09-28'
+            except Exception as e:
+                print(f"  Warning: Failed to detect date range for {plant_id}: {e}, using defaults")
+                start_date = '2022-01-01'
+                end_date = '2024-09-28'
+            
+            # Create minimal plant config with detected dates
+            plant_config = {
+                'plant_id': plant_id,
+                'data_path': data_path,
+                'future_hours': 24,
+                'train_ratio': 0.8,
+                'val_ratio': 0.1,
+                'test_ratio': 0.1,
+                'random_seed': 42,
+                'shuffle_split': True,  # Default to shuffle for robust evaluation
+                'weather_category': 'medium_weather',
+                'start_date': start_date,  # Use detected date range
+                'end_date': end_date,      # Use detected date range
+                # DL parameters - consistent with multiplant
+                'dl_params': {
+                    'low': {
+                        'epochs': 20,
+                        'batch_size': 64,
+                        'learning_rate': 0.001,
+                        'patience': 10,
+                        'min_delta': 0.001,
+                        'weight_decay': 0.0001,
+                        'd_model': 16,
+                        'hidden_dim': 8,
+                        'num_heads': 2,
+                        'num_layers': 1,
+                        'dropout': 0.1,
+                        'tcn_channels': [8, 16],
+                        'kernel_size': 3
+                    },
+                    'mid_low': {
+                        'epochs': 35,
+                        'batch_size': 64,
+                        'learning_rate': 0.001,
+                        'patience': 10,
+                        'min_delta': 0.001,
+                        'weight_decay': 0.0001,
+                        'd_model': 24,
+                        'hidden_dim': 12,
+                        'num_heads': 2,
+                        'num_layers': 1,
+                        'dropout': 0.1,
+                        'tcn_channels': [12, 24],
+                        'kernel_size': 3
+                    },
+                    'mid_high': {
+                        'epochs': 50,
+                        'batch_size': 64,
+                        'learning_rate': 0.001,
+                        'patience': 10,
+                        'min_delta': 0.001,
+                        'weight_decay': 0.0001,
+                        'd_model': 28,
+                        'hidden_dim': 14,
+                        'num_heads': 2,
+                        'num_layers': 1,
+                        'dropout': 0.1,
+                        'tcn_channels': [14, 28],
+                        'kernel_size': 3
+                    },
+                    'high': {
+                        'epochs': 50,
+                        'batch_size': 64,
+                        'learning_rate': 0.001,
+                        'patience': 10,
+                        'min_delta': 0.001,
+                        'weight_decay': 0.0001,
+                        'd_model': 32,
+                        'hidden_dim': 16,
+                        'num_heads': 2,
+                        'num_layers': 2,
+                        'dropout': 0.1,
+                        'tcn_channels': [16, 32],
+                        'kernel_size': 3
+                    }
                 },
-                'mid_low': {
-                    'epochs': 35,
-                    'batch_size': 64,
-                    'learning_rate': 0.001,
-                    'patience': 10,
-                    'min_delta': 0.001,
-                    'weight_decay': 0.0001,
-                    'd_model': 24,
-                    'hidden_dim': 12,
-                    'num_heads': 2,
-                    'num_layers': 1,
-                    'dropout': 0.1,
-                    'tcn_channels': [12, 24],
-                    'kernel_size': 3
-                },
-                'mid_high': {
-                    'epochs': 50,
-                    'batch_size': 64,
-                    'learning_rate': 0.001,
-                    'patience': 10,
-                    'min_delta': 0.001,
-                    'weight_decay': 0.0001,
-                    'd_model': 28,
-                    'hidden_dim': 14,
-                    'num_heads': 2,
-                    'num_layers': 1,
-                    'dropout': 0.1,
-                    'tcn_channels': [14, 28],
-                    'kernel_size': 3
-                },
-                'high': {
-                    'epochs': 50,
-                    'batch_size': 64,
-                    'learning_rate': 0.001,
-                    'patience': 10,
-                    'min_delta': 0.001,
-                    'weight_decay': 0.0001,
-                    'd_model': 32,
-                    'hidden_dim': 16,
-                    'num_heads': 2,
-                    'num_layers': 2,
-                    'dropout': 0.1,
-                    'tcn_channels': [16, 32],
-                    'kernel_size': 3
-                }
-            },
-            # ML parameters - consistent with multiplant
-            'ml_params': {
-                'low': {
-                    'n_estimators': 10,
-                    'max_depth': 1,
-                    'learning_rate': 0.2,
-                    'random_state': 42,
-                    'verbosity': -1
-                },
-                'mid_low': {
-                    'n_estimators': 20,
-                    'max_depth': 2,
-                    'learning_rate': 0.15,
-                    'random_state': 42,
-                    'verbosity': -1
-                },
-                'mid_high': {
-                    'n_estimators': 25,
-                    'max_depth': 2,
-                    'learning_rate': 0.12,
-                    'random_state': 42,
-                    'verbosity': -1
-                },
-                'high': {
-                    'n_estimators': 30,
-                    'max_depth': 3,
-                    'learning_rate': 0.1,
-                    'random_state': 42,
-                    'verbosity': -1
+                # ML parameters - consistent with multiplant
+                'ml_params': {
+                    'low': {
+                        'n_estimators': 10,
+                        'max_depth': 1,
+                        'learning_rate': 0.2,
+                        'random_state': 42,
+                        'verbosity': -1
+                    },
+                    'mid_low': {
+                        'n_estimators': 20,
+                        'max_depth': 2,
+                        'learning_rate': 0.15,
+                        'random_state': 42,
+                        'verbosity': -1
+                    },
+                    'mid_high': {
+                        'n_estimators': 25,
+                        'max_depth': 2,
+                        'learning_rate': 0.12,
+                        'random_state': 42,
+                        'verbosity': -1
+                    },
+                    'high': {
+                        'n_estimators': 30,
+                        'max_depth': 3,
+                        'learning_rate': 0.1,
+                        'random_state': 42,
+                        'verbosity': -1
+                    }
                 }
             }
-        }
+            
+            plant_configs.append(plant_config)
         
-        plant_configs.append(plant_config)
+    except Exception as e:
+        print(f"  Warning: Failed to use PlantConfigManager: {e}")
+        # Fall back to simple auto-detection for all files
+        for csv_file in csv_files:
+            plant_id = csv_file.replace('Project', '').replace('.csv', '').replace('Plant', '').replace('plant', '')
+            data_path = os.path.join(data_dir, csv_file)
+            
+            # Auto-detect date range
+            try:
+                df = pd.read_csv(data_path)
+                if all(col in df.columns for col in ['Year', 'Month', 'Day', 'Hour']):
+                    df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
+                    start_date = df['Datetime'].min().strftime('%Y-%m-%d')
+                    end_date = df['Datetime'].max().strftime('%Y-%m-%d')
+                else:
+                    start_date = '2022-01-01'
+                    end_date = '2024-09-28'
+            except Exception:
+                start_date = '2022-01-01'
+                end_date = '2024-09-28'
+            
+            # Use default config (same structure as above)
+            plant_config = {
+                'plant_id': plant_id,
+                'data_path': data_path,
+                'future_hours': 24,
+                'train_ratio': 0.8,
+                'val_ratio': 0.1,
+                'test_ratio': 0.1,
+                'random_seed': 42,
+                'shuffle_split': True,
+                'weather_category': 'medium_weather',
+                'start_date': start_date,
+                'end_date': end_date,
+                'dl_params': {},
+                'ml_params': {}
+            }
+            plant_configs.append(plant_config)
     
     return plant_configs
 
