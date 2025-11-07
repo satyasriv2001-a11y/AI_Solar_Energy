@@ -89,6 +89,11 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         # Data preprocessing
         df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
         
+        # Debug: Print data info after preprocessing
+        print(f"  Data after preprocessing: {len(df_clean)} rows")
+        print(f"  Historical features: {len(hist_feats)} features")
+        print(f"  Forecast features: {len(fcst_feats)} features")
+        
         # Create daily windows (one prediction per day)
         # Aligns with day-ahead forecasting scenario
         # Supports variable lookback (24h=1day, 72h=3days)
@@ -96,6 +101,9 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         X_hist, X_fcst, y, hours, dates = create_daily_windows(
             df_clean, config['future_hours'], hist_feats, fcst_feats, no_hist_power, past_hours
         )
+        
+        # Debug: Print samples after window creation
+        print(f"  Samples after window creation: {len(X_hist)} samples")
         
         # Data splitting: Random shuffle for robust evaluation
         # Covers all seasons and ensures model generalization
@@ -120,7 +128,12 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         test_idx = indices[train_size + val_size:]
         
         print(f"  Data split: Train={len(train_idx)}, Val={len(val_idx)}, Test={len(test_idx)}")
-        print(f"  Test period: {dates[test_idx[0]]} to {dates[test_idx[-1]]}")
+        # Fix test period display: sort test dates to show correct time range
+        test_dates_sorted = sorted([dates[i] for i in test_idx])
+        if test_dates_sorted:
+            print(f"  Test period: {test_dates_sorted[0].strftime('%Y-%m-%d')} to {test_dates_sorted[-1].strftime('%Y-%m-%d')}")
+        else:
+            print(f"  Test period: No test data")
         
         X_hist_train, y_train = X_hist[train_idx], y[train_idx]
         X_hist_val, y_val = X_hist[val_idx], y[val_idx]
