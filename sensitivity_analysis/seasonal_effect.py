@@ -24,9 +24,10 @@ from sensitivity_analysis.common_utils import (
     get_season, compute_nrmse,
     create_base_config, run_single_experiment,
     load_all_plant_configs, save_results, create_formatted_pivot,
-    set_global_seed
+    set_global_seed,
+    load_and_filter_data
 )
-from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, split_data
+from data.data_utils import preprocess_features, create_daily_windows, split_data
 
 
 def run_seasonal_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity_analysis/results', local_output_dir: str = None):
@@ -67,10 +68,9 @@ def run_seasonal_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity
         print(f"Plant {plant_idx}/{len(plant_configs)}: {plant_id}")
         print(f"{'=' * 80}")
         
-        # Load data
+        # Load and filter data (ensures data starts from 2022-01-01)
         try:
-            df = load_raw_data(data_path)
-            df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
+            df = load_and_filter_data(data_path, plant_config)
         except Exception as e:
             print(f"Error loading data: {e}")
             continue

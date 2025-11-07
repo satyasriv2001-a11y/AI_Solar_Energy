@@ -91,10 +91,47 @@ def set_global_seed(seed=42):
     os.environ['PYTHONHASHSEED'] = str(seed)
     
     print(f"Set global random seed: {seed}")
+
 from data.data_utils import load_raw_data, preprocess_features, create_daily_windows, create_sliding_windows, split_data
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
 import numpy as np
+import pandas as pd
+
+
+def load_and_filter_data(data_path: str, plant_config: Dict) -> pd.DataFrame:
+    """
+    Load and filter data by date range
+    CRITICAL: Ensures all data starts from 2022-01-01
+    
+    Args:
+        data_path: Path to data CSV file
+        plant_config: Plant configuration dictionary
+        
+    Returns:
+        Filtered DataFrame with Datetime column
+    """
+    df = load_raw_data(data_path)
+    df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
+    
+    # CRITICAL: Filter data by date range BEFORE any processing
+    # Ensure all experiments use data starting from 2022-01-01
+    start_date = plant_config.get('start_date', '2022-01-01')
+    end_date = plant_config.get('end_date', '2024-09-28')
+    
+    # Force start_date to be at least 2022-01-01
+    if not start_date or start_date < '2022-01-01':
+        start_date = '2022-01-01'
+    
+    if start_date:
+        start_dt = pd.to_datetime(start_date)
+        df = df[df['Datetime'] >= start_dt].copy()
+    
+    if end_date:
+        end_dt = pd.to_datetime(end_date)
+        df = df[df['Datetime'] <= end_dt].copy()
+    
+    return df
 
 
 # Model definitions
@@ -176,7 +213,7 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
         'shuffle_split': plant_config.get('shuffle_split', True),  # Default to shuffle for robust evaluation
         'random_seed': plant_config.get('random_seed', 42),
         'weather_category': plant_config.get('weather_category', 'medium_weather'),
-        'start_date': plant_config.get('start_date', '2022-01-01'),
+        'start_date': plant_config.get('start_date', '2022-01-01'),  # Default to 2022-01-01
         'end_date': plant_config.get('end_date', '2024-09-28'),
         'save_options': {
             'save_model': False,
@@ -185,6 +222,10 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
             'save_excel_results': False
         }
     }
+    
+    # CRITICAL: Force start_date to be at least 2022-01-01
+    if not config['start_date'] or config['start_date'] < '2022-01-01':
+        config['start_date'] = '2022-01-01'
     
     # Add model parameters
     if model in DL_MODELS:
@@ -457,12 +498,18 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
             data_path = os.path.join(data_dir, csv_file)
             
             # Auto-detect date range from data file
+            # CRITICAL: Force start_date to be at least 2022-01-01
             try:
                 df = pd.read_csv(data_path)
                 if all(col in df.columns for col in ['Year', 'Month', 'Day', 'Hour']):
                     df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
-                    start_date = df['Datetime'].min().strftime('%Y-%m-%d')
+                    detected_start = df['Datetime'].min().strftime('%Y-%m-%d')
                     end_date = df['Datetime'].max().strftime('%Y-%m-%d')
+                    # Force start_date to be at least 2022-01-01
+                    if detected_start < '2022-01-01':
+                        start_date = '2022-01-01'
+                    else:
+                        start_date = detected_start
                 else:
                     start_date = '2022-01-01'
                     end_date = '2024-09-28'
@@ -472,6 +519,10 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
                 end_date = '2024-09-28'
             
             # Create minimal plant config with detected dates
+            # CRITICAL: Ensure start_date is at least 2022-01-01
+            if not start_date or start_date < '2022-01-01':
+                start_date = '2022-01-01'
+            
             plant_config = {
                 'plant_id': plant_id,
                 'data_path': data_path,
@@ -482,8 +533,8 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
                 'random_seed': 42,
                 'shuffle_split': True,  # Default to shuffle for robust evaluation
                 'weather_category': 'medium_weather',
-                'start_date': start_date,  # Use detected date range
-                'end_date': end_date,      # Use detected date range
+                'start_date': start_date,  # Force >= 2022-01-01
+                'end_date': end_date,
                 # DL parameters - consistent with multiplant
                 'dl_params': {
                     'low': {
@@ -590,18 +641,28 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
             data_path = os.path.join(data_dir, csv_file)
             
             # Auto-detect date range
+            # CRITICAL: Force start_date to be at least 2022-01-01
             try:
                 df = pd.read_csv(data_path)
                 if all(col in df.columns for col in ['Year', 'Month', 'Day', 'Hour']):
                     df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
-                    start_date = df['Datetime'].min().strftime('%Y-%m-%d')
+                    detected_start = df['Datetime'].min().strftime('%Y-%m-%d')
                     end_date = df['Datetime'].max().strftime('%Y-%m-%d')
+                    # Force start_date to be at least 2022-01-01
+                    if detected_start < '2022-01-01':
+                        start_date = '2022-01-01'
+                    else:
+                        start_date = detected_start
                 else:
                     start_date = '2022-01-01'
                     end_date = '2024-09-28'
             except Exception:
                 start_date = '2022-01-01'
                 end_date = '2024-09-28'
+            
+            # CRITICAL: Ensure start_date is at least 2022-01-01
+            if not start_date or start_date < '2022-01-01':
+                start_date = '2022-01-01'
             
             # Use default config (same structure as above)
             plant_config = {
@@ -614,7 +675,7 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
                 'random_seed': 42,
                 'shuffle_split': True,
                 'weather_category': 'medium_weather',
-                'start_date': start_date,
+                'start_date': start_date,  # Force >= 2022-01-01
                 'end_date': end_date,
                 'dl_params': {},
                 'ml_params': {}
@@ -762,10 +823,9 @@ def run_experiments_for_plants(plant_configs: List[Dict], models: List[str],
         print(f"Plant {plant_idx}/{len(plant_configs)}: {plant_id}")
         print(f"{'=' * 80}")
         
-        # Load data
+        # Load and filter data (ensures data starts from 2022-01-01)
         try:
-            df = load_raw_data(data_path)
-            df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
+            df = load_and_filter_data(data_path, plant_config)
         except Exception as e:
             print(f"Error loading data: {e}")
             continue
