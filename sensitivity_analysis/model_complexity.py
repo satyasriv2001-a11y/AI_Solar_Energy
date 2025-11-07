@@ -58,7 +58,7 @@ def create_complexity_config(plant_config, model, complexity, lookback=24, use_t
         'train_ratio': plant_config.get('train_ratio', 0.8),
         'val_ratio': plant_config.get('val_ratio', 0.1),
         'test_ratio': plant_config.get('test_ratio', 0.1),
-        'shuffle_split': plant_config.get('shuffle_split', False),  # Default to no shuffle to match multi-plant
+        'shuffle_split': plant_config.get('shuffle_split', True),  # Default to shuffle for robust evaluation
         'random_seed': plant_config.get('random_seed', 42),
         'weather_category': plant_config.get('weather_category', 'medium_weather'),
         'start_date': plant_config.get('start_date', '2022-01-01'),

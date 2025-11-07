@@ -172,7 +172,7 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
         'train_ratio': plant_config.get('train_ratio', 0.8),
         'val_ratio': plant_config.get('val_ratio', 0.1),
         'test_ratio': plant_config.get('test_ratio', 0.1),
-        'shuffle_split': plant_config.get('shuffle_split', False),  # Default to no shuffle to match multi-plant
+        'shuffle_split': plant_config.get('shuffle_split', True),  # Default to shuffle for robust evaluation
         'random_seed': plant_config.get('random_seed', 42),
         'weather_category': plant_config.get('weather_category', 'medium_weather'),
         'start_date': plant_config.get('start_date', '2022-01-01'),
@@ -268,7 +268,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame, use_sliding_windows: b
         total_samples = len(X_hist)
         indices = np.arange(total_samples)
         
-        shuffle_split = config.get('shuffle_split', False)  # Default to no shuffle to match multi-plant
+        shuffle_split = config.get('shuffle_split', True)  # Default to shuffle for robust evaluation
         random_seed = config.get('random_seed', 42)
         
         if shuffle_split:
@@ -439,7 +439,7 @@ def load_all_plant_configs(data_dir: str = 'data') -> List[Dict]:
             'val_ratio': 0.1,
             'test_ratio': 0.1,
             'random_seed': 42,
-            'shuffle_split': False,  # Default to no shuffle (sequential split) to match multi-plant
+            'shuffle_split': True,  # Default to shuffle for robust evaluation
             'weather_category': 'medium_weather',
             'start_date': '2022-01-01',
             'end_date': '2024-09-28',

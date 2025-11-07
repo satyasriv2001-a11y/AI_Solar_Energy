@@ -56,7 +56,7 @@ def run_all_experiments(data_dir='data', output_dir='sensitivity_analysis/result
         4: ('Lookback Window Length', 'lookback_window'),
         5: ('Model Complexity', 'model_complexity'),
         6: ('Training Dataset Scale', 'training_scale'),
-        7: ('Shuffle Training', 'no_shuffle'),
+        7: ('No Shuffle Training', 'no_shuffle'),
         8: ('Dataset Extension (Hourly Sliding Windows)', 'dataset_extension')
     }
     
