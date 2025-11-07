@@ -168,6 +168,7 @@ def create_base_config(plant_config: Dict, model: str, complexity: str = 'high',
         'use_time_encoding': use_te,
         'past_hours': lookback,
         'past_days': lookback // 24,
+        'no_hist_power': False,  # PV+NWP uses historical power data
         'future_hours': plant_config.get('future_hours', 24),
         'train_ratio': plant_config.get('train_ratio', 0.8),
         'val_ratio': plant_config.get('val_ratio', 0.1),

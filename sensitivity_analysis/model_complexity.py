@@ -40,49 +40,21 @@ COMPLEXITY_LEVELS = ['low', 'mid_low', 'mid_high', 'high']
 
 
 def create_complexity_config(plant_config, model, complexity, lookback=24, use_te=False):
-    """Create configuration with specific complexity level"""
+    """
+    Create configuration with specific complexity level
+    Uses plant_config parameters (same as multi_plant) to ensure consistency
+    """
+    from sensitivity_analysis.common_utils import create_base_config
     
-    config = {
-        'plant_id': plant_config['plant_id'],
-        'data_path': plant_config['data_path'],
-        'model': model,
-        'model_complexity': complexity,
-        'use_pv': True,
-        'use_hist_weather': False,
-        'use_forecast': True,
-        'use_ideal_nwp': False,
-        'use_time_encoding': use_te,
-        'past_hours': lookback,
-        'past_days': lookback // 24,
-        'future_hours': plant_config.get('future_hours', 24),
-        'train_ratio': plant_config.get('train_ratio', 0.8),
-        'val_ratio': plant_config.get('val_ratio', 0.1),
-        'test_ratio': plant_config.get('test_ratio', 0.1),
-        'shuffle_split': plant_config.get('shuffle_split', True),  # Default to shuffle for robust evaluation
-        'random_seed': plant_config.get('random_seed', 42),
-        'weather_category': plant_config.get('weather_category', 'medium_weather'),
-        'start_date': plant_config.get('start_date', '2022-01-01'),
-        'end_date': plant_config.get('end_date', '2024-09-28'),
-        'save_options': {
-            'save_model': False,
-            'save_predictions': False,
-            'save_training_log': False,
-            'save_excel_results': False
-        }
-    }
+    # Use create_base_config to ensure consistency with multi_plant
+    # This reads parameters from plant_config (same as multi_plant)
+    config = create_base_config(plant_config, model, complexity=complexity, 
+                                lookback=lookback, use_te=use_te)
     
-    # Define complexity parameters
+    # Override with complexity-specific parameters for mid_low and mid_high
+    # (These are only used in sensitivity analysis, not in multi_plant)
     if model in DL_MODELS:
-        if complexity == 'low':
-            config['train_params'] = {
-                'epochs': 20, 'batch_size': 64, 'learning_rate': 0.001,
-                'patience': 10, 'min_delta': 0.001, 'weight_decay': 0.0001
-            }
-            config['model_params'] = {
-                'd_model': 16, 'hidden_dim': 8, 'num_heads': 2, 'num_layers': 1, 'dropout': 0.1,
-                'tcn_channels': [8, 16], 'kernel_size': 3
-            }
-        elif complexity == 'mid_low':
+        if complexity == 'mid_low':
             config['train_params'] = {
                 'epochs': 35, 'batch_size': 64, 'learning_rate': 0.001,
                 'patience': 10, 'min_delta': 0.001, 'weight_decay': 0.0001
@@ -100,23 +72,8 @@ def create_complexity_config(plant_config, model, complexity, lookback=24, use_t
                 'd_model': 28, 'hidden_dim': 14, 'num_heads': 2, 'num_layers': 1, 'dropout': 0.1,
                 'tcn_channels': [14, 28], 'kernel_size': 3
             }
-        else:  # high
-            config['train_params'] = {
-                'epochs': 50, 'batch_size': 64, 'learning_rate': 0.001,
-                'patience': 10, 'min_delta': 0.001, 'weight_decay': 0.0001
-            }
-            config['model_params'] = {
-                'd_model': 32, 'hidden_dim': 16, 'num_heads': 2, 'num_layers': 2, 'dropout': 0.1,
-                'tcn_channels': [16, 32], 'kernel_size': 3
-            }
-            
     elif model in ML_MODELS:
-        if complexity == 'low':
-            config['model_params'] = {
-                'n_estimators': 10, 'max_depth': 1, 'learning_rate': 0.2,
-                'random_state': 42, 'verbosity': -1
-            }
-        elif complexity == 'mid_low':
+        if complexity == 'mid_low':
             config['model_params'] = {
                 'n_estimators': 20, 'max_depth': 2, 'learning_rate': 0.15,
                 'random_state': 42, 'verbosity': -1
@@ -126,11 +83,9 @@ def create_complexity_config(plant_config, model, complexity, lookback=24, use_t
                 'n_estimators': 25, 'max_depth': 2, 'learning_rate': 0.12,
                 'random_state': 42, 'verbosity': -1
             }
-        else:  # high
-            config['model_params'] = {
-                'n_estimators': 30, 'max_depth': 3, 'learning_rate': 0.1,
-                'random_state': 42, 'verbosity': -1
-            }
+    
+    # Explicitly set no_hist_power for clarity (PV+NWP uses historical power)
+    config['no_hist_power'] = False
     
     return config
 
