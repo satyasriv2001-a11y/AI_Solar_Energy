@@ -142,13 +142,17 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         test_data = (X_hist_test, X_fcst_test, y_test, test_hours, test_dates)
         scalers = (scaler_hist, scaler_fcst, scaler_target)
         
-        # Train model
-        start_time = time.time()
+        # Train model (same as sensitivity_analysis)
+        # Note: Use train_time_sec from metrics for consistency with sensitivity_analysis
+        # The internal timing excludes initialization overhead (DataLoader creation, model init, etc.)
         if config['model'] in ['LSTM', 'GRU', 'Transformer', 'TCN']:
             model, metrics = train_dl_model(config, train_data, val_data, test_data, scalers)
         else:
             model, metrics = train_ml_model(config, train_data, val_data, test_data, scalers)
-        training_time = time.time() - start_time
+        
+        # Use train_time_sec from metrics (same as sensitivity_analysis) for consistency
+        # Fallback to 0 if not available (for ML models that don't provide it)
+        training_time = metrics.get('train_time_sec', 0.0)
         
         # Parse scenario name
         use_pv = config.get('use_pv', False)
@@ -184,7 +188,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
             'rmse': metrics.get('rmse', 0.0),
             'r2': metrics.get('r2', 0.0),
             'nrmse': metrics.get('nrmse', 0.0),
-            'train_time_sec': metrics.get('train_time_sec', round(training_time, 2)),  # Prefer value from metrics
+            'train_time_sec': training_time,  # Use train_time_sec from metrics (same as sensitivity_analysis)
             'test_samples': metrics.get('samples_count', 0),
             'best_epoch': int(metrics.get('best_epoch', 0)) if not np.isnan(metrics.get('best_epoch', 0)) else 0,
             'param_count': int(metrics.get('param_count', 0)),
