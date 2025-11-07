@@ -309,12 +309,16 @@ def run_single_experiment(config: Dict, df: pd.DataFrame, use_sliding_windows: b
         scalers = (scaler_hist, scaler_fcst, scaler_target)
         
         # Train model (same as multi-plant)
-        start_time = time.time()
+        # Note: Use train_time_sec from metrics for consistency with multi_plant
+        # The internal timing excludes initialization overhead (DataLoader creation, model init, etc.)
         if config['model'] in ['LSTM', 'GRU', 'Transformer', 'TCN']:
             model, metrics = train_dl_model(config, train_data, val_data, test_data, scalers)
         else:
             model, metrics = train_ml_model(config, train_data, val_data, test_data, scalers)
-        training_time = time.time() - start_time
+        
+        # Use train_time_sec from metrics (same as multi_plant) for consistency
+        # Fallback to 0 if not available (for ML models that don't provide it)
+        training_time = metrics.get('train_time_sec', 0.0)
         
         # Return result with predictions
         return {
