@@ -81,17 +81,33 @@ def load_raw_data(path: str) -> pd.DataFrame:
 def preprocess_features(df: pd.DataFrame, config: dict):
     df_clean = df.dropna(subset=[TARGET_COL]).copy()
 
-    # Date filtering: only use data after 2022-01-01
+    # Date filtering: CRITICAL - ensure all experiments use data starting from 2022-01-01
+    # This is a double-check to ensure date filtering even if data was not pre-filtered
     start_date = config.get('start_date', '2022-01-01')
     end_date = config.get('end_date', '2024-09-28')
     
+    # Force start_date to be at least 2022-01-01 if not specified or earlier
+    if not start_date:
+        start_date = '2022-01-01'
+    else:
+        start_dt_check = pd.to_datetime(start_date)
+        min_start_dt = pd.to_datetime('2022-01-01')
+        if start_dt_check < min_start_dt:
+            start_date = '2022-01-01'
+    
     if start_date:
         start_dt = pd.to_datetime(start_date)
+        rows_before = len(df_clean)
         df_clean = df_clean[df_clean['Datetime'] >= start_dt].copy()
+        if len(df_clean) < rows_before:
+            print(f"  [Date Filter] Filtered {rows_before - len(df_clean)} rows before {start_date}")
     
     if end_date:
         end_dt = pd.to_datetime(end_date)
+        rows_before = len(df_clean)
         df_clean = df_clean[df_clean['Datetime'] <= end_dt].copy()
+        if len(df_clean) < rows_before:
+            print(f"  [Date Filter] Filtered {rows_before - len(df_clean)} rows after {end_date}")
 
     # Add time encoding features (based on switch)
     use_time_encoding = config.get('use_time_encoding', True)

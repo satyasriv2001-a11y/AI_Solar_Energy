@@ -116,11 +116,19 @@ class PlantConfigManager:
         plant_id = plant_config['plant_id']
         
         # Base configuration
+        # CRITICAL: Ensure all experiments use data starting from 2022-01-01
+        start_date = plant_config.get('start_date', '2022-01-01')
+        end_date = plant_config.get('end_date', '2024-09-28')
+        
+        # Force start_date to be at least 2022-01-01
+        if not start_date or start_date < '2022-01-01':
+            start_date = '2022-01-01'
+        
         base_config = {
             'plant_id': plant_id,
             'data_path': plant_config['data_path'],
-            'start_date': plant_config['start_date'],
-            'end_date': plant_config['end_date'],
+            'start_date': start_date,
+            'end_date': end_date,
             'future_hours': plant_config['future_hours'],
             'train_ratio': plant_config['train_ratio'],
             'val_ratio': plant_config['val_ratio'],

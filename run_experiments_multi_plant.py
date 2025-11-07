@@ -343,6 +343,21 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
     df = pd.read_csv(data_path)
     df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
     
+    # CRITICAL: Filter data by date range BEFORE any processing
+    # Ensure all experiments use data starting from 2022-01-01
+    start_date = plant_config.get('start_date', '2022-01-01')
+    end_date = plant_config.get('end_date', '2024-09-28')
+    
+    if start_date:
+        start_dt = pd.to_datetime(start_date)
+        df = df[df['Datetime'] >= start_dt].copy()
+        print(f"  Data filtered: Start date = {start_date} ({len(df)} rows remain)")
+    
+    if end_date:
+        end_dt = pd.to_datetime(end_date)
+        df = df[df['Datetime'] <= end_dt].copy()
+        print(f"  Data filtered: End date = {end_date} ({len(df)} rows remain)")
+    
     # GPU information
     import torch
     if torch.cuda.is_available():
