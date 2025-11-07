@@ -80,11 +80,11 @@ Analyzes impact of training dataset size:
 python sensitivity_analysis/training_scale.py --data-dir data --output-dir sensitivity_analysis/results
 ```
 
-### 7. No Shuffle Training (`no_shuffle.py`)
-Compares shuffled vs. sequential (no shuffle) data splitting:
-- **Data Split**: Sequential (preserves temporal order)
+### 7. Shuffle Training (`no_shuffle.py`)
+Analyzes model performance with shuffled data splitting (random split):
+- **Data Split**: Shuffled (random split) - covers all seasons for robust evaluation
 - **Models**: 7 models + Linear (NWP only)
-- **Output**: Results grouped by model
+- **Output**: Results with shuffled data splitting (compared to default sequential split)
 
 ```bash
 python sensitivity_analysis/no_shuffle.py --data-dir data --output-dir sensitivity_analysis/results

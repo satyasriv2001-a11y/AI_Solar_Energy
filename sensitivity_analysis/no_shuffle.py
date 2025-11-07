@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sensitivity Analysis Experiment 7: Training Dataset No Shuffle
+Sensitivity Analysis Experiment 7: Shuffle Training
 
-Analyze model performance with sequential (non-shuffled) data splitting
+Analyze model performance with shuffled data splitting (random split)
 - Models: 7 models (LSTM, GRU, Transformer, TCN, RF, XGB, LGBM) + Linear (NWP only)
 - Configuration: PV+NWP, 24-hour lookback, no TE, high complexity
-- Data split: Sequential (no shuffle) - preserves temporal order
+- Data split: Shuffled (random split) - covers all seasons for robust evaluation
 - Metrics: MAE, RMSE, R2, NRMSE, train_time (mean and std across 100 plants)
 """
 
@@ -34,14 +34,14 @@ from data.data_utils import load_raw_data, preprocess_features
 
 def run_no_shuffle_analysis(data_dir: str = 'data', output_dir: str = 'sensitivity_analysis/results', local_output_dir: str = None):
     """
-    Run no-shuffle analysis across all plants
+    Run shuffle analysis across all plants (tests shuffled data splitting)
     
     Args:
         data_dir: Directory containing plant CSV files
         output_dir: Directory to save results
     """
     print("=" * 80)
-    print("Sensitivity Analysis Experiment 7: No Shuffle Training")
+    print("Sensitivity Analysis Experiment 7: Shuffle Training")
     print("=" * 80)
     
 
@@ -95,8 +95,8 @@ def run_no_shuffle_analysis(data_dir: str = 'data', output_dir: str = 'sensitivi
                 config = create_base_config(plant_config, model, complexity='high', 
                                           lookback=24, use_te=False)
             
-            # Set shuffle_split to False for sequential splitting
-            config['shuffle_split'] = False
+            # Set shuffle_split to True for this experiment (testing shuffle effect)
+            config['shuffle_split'] = True
             
             try:
                 # Train and evaluate
