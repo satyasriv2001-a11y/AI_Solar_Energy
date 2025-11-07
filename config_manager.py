@@ -57,13 +57,14 @@ class PlantConfigManager:
     
     def get_all_plants(self, plants_dir: str = "config/plants") -> List[Dict]:
         """
-        Get all plant configurations
+        Get all plant configurations, sorted by plant ID (numeric order)
+        This ensures consistent ordering for skip/max_plants functionality
         
         Args:
             plants_dir: Plant configuration directory
             
         Returns:
-            List of plant configurations
+            List of plant configurations, sorted by plant_id (numeric order)
         """
         plants = []
         
@@ -79,6 +80,18 @@ class PlantConfigManager:
                     plants.append(config)
                 except Exception as e:
                     print(f"Error loading {filename}: {e}")
+        
+        # Sort by plant_id (numeric order) to ensure consistent ordering
+        # This is critical for skip/max_plants functionality to work correctly
+        def sort_key(plant_config):
+            plant_id = plant_config.get('plant_id', '0')
+            # Try to convert to int for numeric sorting, fallback to string comparison
+            try:
+                return int(plant_id)
+            except (ValueError, TypeError):
+                return plant_id
+        
+        plants.sort(key=sort_key)
         
         return plants
     

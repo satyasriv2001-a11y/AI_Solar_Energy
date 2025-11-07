@@ -485,7 +485,7 @@ def run_all_plants(resume: bool = True, skip: int = 0, max_plants: int = None,
     print("Multi-Plant Batch Experiment Runner")
     print("=" * 80)
     
-    # Get all plant configurations
+    # Get all plant configurations (sorted by plant_id for consistent ordering)
     manager = PlantConfigManager()
     all_plants = manager.get_all_plants()
     
@@ -493,6 +493,13 @@ def run_all_plants(resume: bool = True, skip: int = 0, max_plants: int = None,
         print("[ERROR] No plant configurations found in config/plants/")
         print("Please run: python batch_create_configs.py")
         return
+    
+    # Plants are now sorted by plant_id (numeric order) for consistent skip/max_plants behavior
+    print(f"Total plants available: {len(all_plants)} (sorted by plant_id)")
+    if len(all_plants) > 0:
+        plant_ids = [p['plant_id'] for p in all_plants]
+        print(f"Plant order: {', '.join(str(pid) for pid in plant_ids[:10])}" + 
+              (f" ... (and {len(plant_ids) - 10} more)" if len(plant_ids) > 10 else ""))
     
     # Filter plants based on arguments
     if plants:
@@ -504,11 +511,12 @@ def run_all_plants(resume: bool = True, skip: int = 0, max_plants: int = None,
         filtered_plants = all_plants[skip:]
         if max_plants:
             filtered_plants = filtered_plants[:max_plants]
-        print(f"Total plants available: {len(all_plants)}")
         if skip > 0:
-            print(f"Skipping first: {skip} plants")
+            print(f"Skipping first: {skip} plants (will start from plant_id: {all_plants[skip]['plant_id']})")
         if max_plants:
             print(f"Running maximum: {max_plants} plants")
+            if len(filtered_plants) > 0:
+                print(f"  Will process plants: {filtered_plants[0]['plant_id']} to {filtered_plants[-1]['plant_id']}")
     
     # Set output directory
     if output_dir is None:
