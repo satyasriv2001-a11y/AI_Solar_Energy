@@ -129,9 +129,20 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         
         print(f"  Data split: Train={len(train_idx)}, Val={len(val_idx)}, Test={len(test_idx)}")
         # Fix test period display: sort test dates to show correct time range
-        test_dates_sorted = sorted([dates[i] for i in test_idx])
-        if test_dates_sorted:
-            print(f"  Test period: {test_dates_sorted[0].strftime('%Y-%m-%d')} to {test_dates_sorted[-1].strftime('%Y-%m-%d')}")
+        # Note: dates can be strings or datetime objects, handle both cases
+        test_dates_list = [dates[i] for i in test_idx]
+        if test_dates_list:
+            # Convert to strings if needed and sort
+            test_dates_str = []
+            for d in test_dates_list:
+                if isinstance(d, str):
+                    test_dates_str.append(d)
+                elif hasattr(d, 'strftime'):
+                    test_dates_str.append(d.strftime('%Y-%m-%d'))
+                else:
+                    test_dates_str.append(str(d))
+            test_dates_sorted = sorted(test_dates_str)
+            print(f"  Test period: {test_dates_sorted[0]} to {test_dates_sorted[-1]}")
         else:
             print(f"  Test period: No test data")
         
