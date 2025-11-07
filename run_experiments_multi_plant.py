@@ -213,6 +213,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
             'mae': np.nan,
             'rmse': np.nan,
             'r2': np.nan,
+            'nrmse': np.nan,
             'train_time_sec': 0,
             'test_samples': 0,
             'best_epoch': 0,
@@ -356,7 +357,7 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
         # Create new file
         results_df = pd.DataFrame(columns=[
             'plant_id', 'experiment_name', 'model', 'complexity', 'scenario',
-            'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2',
+            'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2', 'nrmse',
             'train_time_sec', 'test_samples', 'best_epoch', 'param_count', 'status'
         ])
         results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
