@@ -50,6 +50,25 @@ from data.data_utils import preprocess_features, create_daily_windows
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
 
+# Import set_global_seed from sensitivity_analysis for reproducibility
+try:
+    from sensitivity_analysis.common_utils import set_global_seed
+except ImportError:
+    # Fallback: define set_global_seed locally if import fails
+    def set_global_seed(seed=42):
+        """Set global random seed for full reproducibility"""
+        import random
+        import torch
+        
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        os.environ['PYTHONHASHSEED'] = str(seed)
+
 
 def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
     """
@@ -63,6 +82,10 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         Experiment result dictionary
     """
     try:
+        # Set random seed for reproducibility (especially important for DL models)
+        random_seed = config.get('random_seed', 42)
+        set_global_seed(random_seed)
+        
         # Data preprocessing
         df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
         
