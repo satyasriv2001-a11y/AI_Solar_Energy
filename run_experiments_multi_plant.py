@@ -46,7 +46,7 @@ os.chdir(script_dir)
 sys.path.append(script_dir)
 
 from config_manager import PlantConfigManager
-from data.data_utils import preprocess_features, create_sliding_windows
+from data.data_utils import preprocess_features, create_daily_windows
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
 
@@ -94,12 +94,12 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         print(f"  Historical features: {len(hist_feats)} features")
         print(f"  Forecast features: {len(fcst_feats)} features")
         
-        # Use 24-hour sliding windows (one prediction per hour)
-        # Creates samples by sliding a 24-hour window across the time series
-        # Supports variable lookback (24h, 72h)
+        # Create daily windows (one prediction per day)
+        # Aligns with day-ahead forecasting scenario
+        # Supports variable lookback (24h=1day, 72h=3days)
         past_hours = config.get('past_hours', 24)
-        X_hist, X_fcst, y, hours, dates = create_sliding_windows(
-            df_clean, past_hours, config['future_hours'], hist_feats, fcst_feats, no_hist_power
+        X_hist, X_fcst, y, hours, dates = create_daily_windows(
+            df_clean, config['future_hours'], hist_feats, fcst_feats, no_hist_power, past_hours
         )
         
         # Debug: Print samples after window creation
