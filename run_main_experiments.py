@@ -22,7 +22,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 sys.path.append(script_dir)
 
-from data.data_utils import preprocess_features, create_daily_windows
+from data.data_utils import preprocess_features, create_sliding_windows
 from train.train_dl import train_dl_model
 from train.train_ml import train_ml_model
 
@@ -240,12 +240,12 @@ def run_all_experiments(output_dir=None):
             start_time = time.time()
             df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
 
-            # Use daily windows (one prediction per day at 23:00)
-            # This aligns with day-ahead forecasting scenario
-            # Supports variable lookback (24h=1day, 72h=3days)
+            # Use 24-hour sliding windows (one prediction per hour)
+            # Creates samples by sliding a 24-hour window across the time series
+            # Supports variable lookback (24h, 72h)
             past_hours = config.get('past_hours', 24)
-            X_hist, X_fcst, y, hours, dates = create_daily_windows(
-                df_clean, config['future_hours'], hist_feats, fcst_feats, no_hist_power, past_hours
+            X_hist, X_fcst, y, hours, dates = create_sliding_windows(
+                df_clean, past_hours, config['future_hours'], hist_feats, fcst_feats, no_hist_power
             )
 
             total_samples = len(X_hist)
