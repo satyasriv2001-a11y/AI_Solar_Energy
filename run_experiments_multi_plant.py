@@ -199,6 +199,13 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         else:
             scenario = 'Unknown'
         
+        # Serialize predictions to comma-separated string for CSV storage
+        predictions = metrics.get('predictions', np.array([]))
+        if isinstance(predictions, np.ndarray):
+            predicted_values_str = ','.join([f'{val:.6f}' for val in predictions.flatten()])
+        else:
+            predicted_values_str = ''
+        
         # Return result
         result = {
             'plant_id': config['plant_id'],
@@ -216,6 +223,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
             'test_samples': metrics.get('samples_count', 0),
             'best_epoch': int(metrics.get('best_epoch', 0)) if not np.isnan(metrics.get('best_epoch', 0)) else 0,
             'param_count': int(metrics.get('param_count', 0)),
+            'predicted_values': predicted_values_str,
             'status': 'SUCCESS'
         }
         
@@ -242,6 +250,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
             'test_samples': 0,
             'best_epoch': 0,
             'param_count': 0,
+            'predicted_values': '',
             'status': 'FAILED',
             'error': str(e)
         }
@@ -397,7 +406,8 @@ def run_plant_experiments(plant_config_path: str, resume: bool = True, output_di
         results_df = pd.DataFrame(columns=[
             'plant_id', 'experiment_name', 'model', 'complexity', 'scenario',
             'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2', 'nrmse',
-            'train_time_sec', 'test_samples', 'best_epoch', 'param_count', 'status'
+            'train_time_sec', 'test_samples', 'best_epoch', 'param_count',
+            'predicted_values', 'status'
         ])
         results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         print(f"Created new result file: {output_file}")
