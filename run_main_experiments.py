@@ -216,7 +216,8 @@ def run_all_experiments(output_dir=None):
         results_df = pd.DataFrame(columns=[
             'experiment_name', 'model', 'complexity', 'feature_combo',
             'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2',
-            'train_time_sec', 'test_samples', 'best_epoch', 'param_count'
+            'train_time_sec', 'test_samples', 'best_epoch', 'param_count',
+            'predicted_values'
         ])
         results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         done_experiments = set()
@@ -312,6 +313,13 @@ def run_all_experiments(output_dir=None):
             else:
                 feat_name_str = 'Unknown'
 
+            # Serialize predictions to comma-separated string for CSV storage
+            predictions = metrics.get('predictions', np.array([]))
+            if isinstance(predictions, np.ndarray):
+                predicted_values_str = ','.join([f'{val:.6f}' for val in predictions.flatten()])
+            else:
+                predicted_values_str = ''
+            
             result = {
                 'experiment_name': exp_name,
                 'model': config['model'],
@@ -325,7 +333,8 @@ def run_all_experiments(output_dir=None):
                 'train_time_sec': round(training_time, 2),
                 'test_samples': metrics.get('samples_count', 0),
                 'best_epoch': int(metrics.get('best_epoch', 0)) if not pd.isna(metrics.get('best_epoch', 0)) else 0,
-                'param_count': int(metrics.get('param_count', 0))
+                'param_count': int(metrics.get('param_count', 0)),
+                'predicted_values': predicted_values_str
             }
 
             print(f"  [OK] MAE: {metrics['mae']:.4f}, RMSE: {metrics['rmse']:.4f}")
@@ -347,7 +356,8 @@ def run_all_experiments(output_dir=None):
                 'use_time_encoding': config['use_time_encoding'],
                 'mae': np.nan, 'rmse': np.nan, 'r2': np.nan,
                 'train_time_sec': 0, 'test_samples': 0,
-                'best_epoch': 0, 'param_count': 0
+                'best_epoch': 0, 'param_count': 0,
+                'predicted_values': ''
             }]).to_csv(output_file, mode='a', header=False, index=False, encoding='utf-8-sig')
             continue
 
