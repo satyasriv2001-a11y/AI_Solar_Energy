@@ -193,45 +193,66 @@ def make_prediction_at_hour(model, config, df_clean, hist_feats, fcst_feats, sca
     fut_data = df_clean.iloc[fut_start:fut_end].copy()
     
     # Check if we have enough data
+    # Ensure hist_feats is a list and get its length
+    hist_feats_list = list(hist_feats) if hist_feats else []
+    n_hist_feats = len(hist_feats_list)
+    
     if len(hist_data) < past_hours and not no_hist_power:
         # Pad with zeros if needed
-        if len(hist_data) > 0:
-            padding = np.zeros((past_hours - len(hist_data), len(hist_feats)))
-            hist_array = np.vstack([padding, hist_data[hist_feats].values])
+        if len(hist_data) > 0 and n_hist_feats > 0:
+            padding = np.zeros((int(past_hours - len(hist_data)), n_hist_feats))
+            hist_array = np.vstack([padding, hist_data[hist_feats_list].values])
         else:
-            hist_array = np.zeros((past_hours, len(hist_feats)))
+            hist_array = np.zeros((int(past_hours), n_hist_feats))
     elif no_hist_power:
-        hist_array = np.zeros((past_hours if past_hours > 0 else 1, len(hist_feats) if hist_feats else 0))
+        hist_array = np.zeros((int(past_hours) if past_hours > 0 else 1, n_hist_feats))
     else:
-        hist_array = hist_data[hist_feats].values
+        if n_hist_feats > 0:
+            hist_array = hist_data[hist_feats_list].values
+        else:
+            hist_array = np.zeros((len(hist_data), 0))
     
     # Get forecast features for future period
-    if fcst_feats:
+    # Ensure fcst_feats is a list and get its length
+    fcst_feats_list = list(fcst_feats) if fcst_feats else []
+    n_fcst_feats = len(fcst_feats_list)
+    
+    if fcst_feats_list and n_fcst_feats > 0:
         if len(fut_data) < future_hours:
             # Pad with last available values
-            last_row = fut_data[fcst_feats].iloc[-1:].values if len(fut_data) > 0 else np.zeros((1, len(fcst_feats)))
-            padding = np.tile(last_row, (future_hours - len(fut_data), 1))
-            fcst_array = np.vstack([fut_data[fcst_feats].values, padding])
+            if len(fut_data) > 0:
+                last_row = fut_data[fcst_feats_list].iloc[-1:].values
+            else:
+                last_row = np.zeros((1, n_fcst_feats))
+            padding = np.tile(last_row, (int(future_hours - len(fut_data)), 1))
+            if len(fut_data) > 0:
+                fcst_array = np.vstack([fut_data[fcst_feats_list].values, padding])
+            else:
+                fcst_array = padding
         else:
-            fcst_array = fut_data[fcst_feats].values[:future_hours]
+            fcst_array = fut_data[fcst_feats_list].values[:int(future_hours)]
     else:
         fcst_array = None
     
     # Get ground truth
-    if len(fut_data) < future_hours:
+    future_hours_int = int(future_hours)
+    if len(fut_data) < future_hours_int:
         # Pad with NaN if not enough data
-        gt = np.full(future_hours, np.nan)
-        gt[:len(fut_data)] = fut_data['Capacity Factor'].values
+        gt = np.full(future_hours_int, np.nan)
+        if len(fut_data) > 0:
+            gt[:len(fut_data)] = fut_data['Capacity Factor'].values
     else:
-        gt = fut_data['Capacity Factor'].values[:future_hours]
+        gt = fut_data['Capacity Factor'].values[:future_hours_int]
     
     # Prepare input for model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Reshape for model input
-    X_hist = hist_array.reshape(1, past_hours if past_hours > 0 else 1, -1)
+    past_hours_int = int(past_hours)
+    future_hours_int = int(future_hours)
+    X_hist = hist_array.reshape(1, past_hours_int if past_hours_int > 0 else 1, -1)
     if fcst_array is not None:
-        X_fcst = fcst_array.reshape(1, future_hours, -1)
+        X_fcst = fcst_array.reshape(1, future_hours_int, -1)
     else:
         X_fcst = None
     
@@ -274,7 +295,8 @@ def make_prediction_at_hour(model, config, df_clean, hist_feats, fcst_feats, sca
     preds_inv = np.clip(preds_inv, 0, 100)
     
     # Create future datetimes
-    future_datetimes = pd.date_range(start=prediction_datetime, periods=future_hours, freq='H')
+    future_hours_int = int(future_hours)
+    future_datetimes = pd.date_range(start=prediction_datetime, periods=future_hours_int, freq='H')
     
     return preds_inv, gt_inv, prediction_datetime, future_datetimes
 
