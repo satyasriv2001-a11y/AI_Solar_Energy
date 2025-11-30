@@ -315,6 +315,15 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
         output_dir: Directory to save prediction CSV files
         test_hours: Number of consecutive hours from test data to use (default: 48)
     """
+    # Ensure test_hours is a Python int (not numpy array/scalar)
+    if isinstance(test_hours, np.ndarray):
+        if test_hours.size == 1:
+            test_hours = int(test_hours.item())
+        else:
+            raise ValueError(f"test_hours must be a scalar, got array of size {test_hours.size}")
+    else:
+        test_hours = int(test_hours)
+    
     print("=" * 80)
     print("Hourly Predictions for Test Data")
     print("=" * 80)
@@ -374,11 +383,11 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     # Ensure all indices are Python integers when accessing lists
     train_hours = np.array([hours[int(i)] for i in train_idx])
     val_hours = np.array([hours[int(i)] for i in val_idx])
-    test_hours = np.array([hours[int(i)] for i in test_idx])
+    test_hours_array = np.array([hours[int(i)] for i in test_idx])  # Renamed to avoid conflict with function parameter
     
     train_data = (X_hist_train, X_fcst_train, y_train, train_hours, [])
     val_data = (X_hist_val, X_fcst_val, y_val, val_hours, [])
-    test_data = (X_hist_test, X_fcst_test, y_test, test_hours, [])
+    test_data = (X_hist_test, X_fcst_test, y_test, test_hours_array, [])
     scalers = (scaler_hist, scaler_fcst, scaler_target)
     
     # Train model
@@ -421,10 +430,10 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     
     # Use 48 consecutive hours starting from the first test sample's start
     # Each hour will be used to predict the next 24 hours
-    test_hours_int = int(test_hours)
+    # test_hours is already converted to int at function start
     future_hours_int = int(future_hours)
     test_hour_indices = []
-    for i in range(test_hours_int):
+    for i in range(test_hours):
         hour_idx = int(first_test_start_in_df + i)  # Ensure it's a scalar integer
         # Make sure we have enough data after this hour for prediction
         if hour_idx >= 0 and hour_idx < len(df_clean) - future_hours_int:
