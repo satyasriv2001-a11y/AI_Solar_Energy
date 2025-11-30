@@ -336,8 +336,8 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     
     # Create sliding windows for train/val/test split
     print("\n[2/4] Creating sliding windows and splitting data...")
-    past_hours = config.get('past_hours', 24)
-    future_hours = config.get('future_hours', 24)
+    past_hours = int(config.get('past_hours', 24))  # Ensure it's a Python int
+    future_hours = int(config.get('future_hours', 24))  # Ensure it's a Python int
     
     X_hist, X_fcst, y, hours, dates = create_sliding_windows(
         df_clean, past_hours, future_hours, hist_feats, fcst_feats, no_hist_power
@@ -351,11 +351,11 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
         np.random.seed(config.get('random_seed', 42))
         np.random.shuffle(indices)
     
-    train_size = int(total_samples * config['train_ratio'])
-    val_size = int(total_samples * config['val_ratio'])
-    train_idx = indices[:train_size]
-    val_idx = indices[train_size:train_size + val_size]
-    test_idx = indices[train_size + val_size:]
+            train_size = int(total_samples * config['train_ratio'])
+            val_size = int(total_samples * config['val_ratio'])
+            train_idx = indices[:train_size]
+            val_idx = indices[train_size:train_size + val_size]
+            test_idx = indices[train_size + val_size:]
     
     print(f"  Train samples: {len(train_idx)}")
     print(f"  Val samples: {len(val_idx)}")
@@ -371,9 +371,10 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     else:
         X_fcst_train = X_fcst_val = X_fcst_test = None
     
-    train_hours = np.array([hours[i] for i in train_idx])
-    val_hours = np.array([hours[i] for i in val_idx])
-    test_hours = np.array([hours[i] for i in test_idx])
+    # Ensure all indices are Python integers when accessing lists
+    train_hours = np.array([hours[int(i)] for i in train_idx])
+    val_hours = np.array([hours[int(i)] for i in val_idx])
+    test_hours = np.array([hours[int(i)] for i in test_idx])
     
     train_data = (X_hist_train, X_fcst_train, y_train, train_hours, [])
     val_data = (X_hist_val, X_fcst_val, y_val, val_hours, [])
@@ -405,16 +406,28 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     # But we want to predict from each hour, not from each sliding window start
     
     # Get the first test sample's starting index in df_clean
-    first_test_sample_idx = int(test_idx[0])  # Ensure it's a scalar integer
-    first_test_start_in_df = past_hours + first_test_sample_idx
+    # Ensure test_idx[0] is converted to Python int
+    if len(test_idx) == 0:
+        raise ValueError("No test samples available. Check data split ratios.")
+    
+    # Convert test_idx to list if it's a numpy array, then get first element
+    if isinstance(test_idx, np.ndarray):
+        test_idx_list = test_idx.tolist()
+    else:
+        test_idx_list = list(test_idx)
+    
+    first_test_sample_idx = int(test_idx_list[0])  # Ensure it's a scalar integer
+    first_test_start_in_df = int(past_hours) + first_test_sample_idx
     
     # Use 48 consecutive hours starting from the first test sample's start
     # Each hour will be used to predict the next 24 hours
+    test_hours_int = int(test_hours)
+    future_hours_int = int(future_hours)
     test_hour_indices = []
-    for i in range(test_hours):
+    for i in range(test_hours_int):
         hour_idx = int(first_test_start_in_df + i)  # Ensure it's a scalar integer
         # Make sure we have enough data after this hour for prediction
-        if hour_idx >= 0 and hour_idx < len(df_clean) - future_hours:
+        if hour_idx >= 0 and hour_idx < len(df_clean) - future_hours_int:
             test_hour_indices.append(hour_idx)
         else:
             break
