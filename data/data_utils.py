@@ -330,17 +330,21 @@ def create_sliding_windows(df, past_hours, future_hours, hist_feats, fcst_feats,
         fcst_feats: List of forecast features
         no_hist_power: If True, don't use historical power data, only use forecast weather
     """
+    # Ensure past_hours and future_hours are Python integers
+    past_hours = int(past_hours)
+    future_hours = int(future_hours)
+    
     X_hist, y, hours, dates = [], [], [], []
     X_fcst = [] if fcst_feats else None
     n = len(df)
     
     for i in range(past_hours, n - future_hours + 1):
-        hist_start = i - past_hours
-        hist_end = i
+        hist_start = int(i - past_hours)
+        hist_end = int(i)
         hist_data = df.iloc[hist_start:hist_end]
         
-        fut_start = i
-        fut_end = i + future_hours
+        fut_start = int(i)
+        fut_end = int(i + future_hours)
         fut_data = df.iloc[fut_start:fut_end]
         
         if no_hist_power:
@@ -352,11 +356,11 @@ def create_sliding_windows(df, past_hours, future_hours, hist_feats, fcst_feats,
             dates.append(fut_data['Datetime'].iloc[-1])
             
             if past_hours > 0 and len(hist_feats) > 0:
-                empty_hist = np.zeros((past_hours, len(hist_feats)))
+                empty_hist = np.zeros((int(past_hours), len(hist_feats)))
             elif past_hours == 0 and len(hist_feats) > 0:
                 empty_hist = np.zeros((1, len(hist_feats)))
             elif past_hours > 0 and len(hist_feats) == 0:
-                empty_hist = np.zeros((past_hours, 0))
+                empty_hist = np.zeros((int(past_hours), 0))
             else:
                 empty_hist = np.zeros((1, 0))
             X_hist.append(empty_hist)
