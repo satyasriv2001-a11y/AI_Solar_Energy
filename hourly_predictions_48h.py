@@ -419,6 +419,68 @@ def create_prediction_plot(pred_df, output_path, hour_num, pred_datetime):
     plt.close()
 
 
+def create_overlay_plot(all_predictions, output_path, model_name):
+    """
+    Create an overlay plot showing all predictions and ground truth.
+    
+    Args:
+        all_predictions: List of tuples (pred_df, hour_num, pred_datetime)
+        output_path: Path to save the plot
+        model_name: Name of the model for the title
+    """
+    plt.figure(figsize=(16, 10))
+    
+    # Collect all unique datetimes and create a comprehensive timeline
+    all_datetimes = set()
+    for pred_df, _, _ in all_predictions:
+        all_datetimes.update(pred_df['Datetime'])
+    
+    all_datetimes = sorted(list(all_datetimes))
+    
+    # Plot each hour's prediction with different colors
+    colors = plt.cm.tab20(np.linspace(0, 1, len(all_predictions)))
+    
+    for idx, (pred_df, hour_num, pred_datetime) in enumerate(all_predictions):
+        # Plot predictions with transparency
+        plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
+                label=f'Hour {hour_num} ({pred_datetime.strftime("%m-%d %H:00")})',
+                linewidth=1.5, alpha=0.6, color=colors[idx])
+    
+    # Collect and plot ground truth (combine all ground truth values)
+    # Create a comprehensive ground truth timeline
+    gt_dict = {}  # datetime -> capacity_factor
+    for pred_df, _, _ in all_predictions:
+        if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
+            for dt, gt_val in zip(pred_df['Datetime'], pred_df['Ground_Truth_Capacity_Factor']):
+                if not pd.isna(gt_val):
+                    # If multiple predictions have the same datetime, use the first non-NaN value
+                    if dt not in gt_dict or pd.isna(gt_dict[dt]):
+                        gt_dict[dt] = gt_val
+    
+    # Plot ground truth if available
+    if gt_dict:
+        gt_datetimes = sorted(gt_dict.keys())
+        gt_values = [gt_dict[dt] for dt in gt_datetimes]
+        plt.plot(gt_datetimes, gt_values, 
+                label='Ground Truth', linewidth=3, color='black', marker='o', 
+                markersize=6, alpha=0.9, zorder=100)
+    
+    plt.xlabel('Datetime', fontsize=14, fontweight='bold')
+    plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+    plt.title(f'All Predictions Overlay - {model_name}\n'
+              f'{len(all_predictions)} hours of predictions (24-hour ahead forecasts)', 
+              fontsize=16, fontweight='bold')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, ncol=1)
+    plt.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Save plot
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"  Overlay plot saved: {output_path}")
+
+
 def run_hourly_predictions(data_path, config, output_dir, test_hours=24, 
                            credentials_path=None, spreadsheet_name=None, save_plots=True):
     """
@@ -569,6 +631,9 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
+    # Store all predictions for overlay plot
+    all_predictions = []
+    
     # Make prediction for each hour
     for hour_num, hour_idx in enumerate(test_hour_indices, 1):
         try:
@@ -605,6 +670,9 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
                 output_file = os.path.join(output_dir, f"predictions_hour_{hour_num:03d}_{timestamp_str}.csv")
                 pred_df.to_csv(output_file, index=False, encoding='utf-8-sig')
             
+            # Store for overlay plot
+            all_predictions.append((pred_df, hour_num, pred_datetime))
+            
             # Create and save plot
             if save_plots:
                 plot_file = os.path.join(output_dir, f"plot_hour_{hour_num:03d}_{timestamp_str}.png")
@@ -619,10 +687,18 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
             traceback.print_exc()
             continue
     
+    # Create overlay plot with all predictions
+    if save_plots and len(all_predictions) > 0:
+        overlay_plot_path = os.path.join(output_dir, "all_predictions_overlay.png")
+        model_name = config.get('experiment_name', 'Model')
+        create_overlay_plot(all_predictions, overlay_plot_path, model_name)
+    
     print(f"\n{'='*80}")
     print(f"[SUCCESS] Completed predictions for {len(test_hour_indices)} hours")
     if save_plots:
-        print(f"Plots saved to: {output_dir}")
+        print(f"Individual plots saved to: {output_dir}")
+        if len(all_predictions) > 0:
+            print(f"Overlay plot saved to: {os.path.join(output_dir, 'all_predictions_overlay.png')}")
     if GSPREAD_AVAILABLE and credentials_path:
         print(f"Google Sheets: Check your Google Drive for the spreadsheet")
     print(f"{'='*80}")
