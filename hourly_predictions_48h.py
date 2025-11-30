@@ -351,11 +351,11 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
         np.random.seed(config.get('random_seed', 42))
         np.random.shuffle(indices)
     
-            train_size = int(total_samples * config['train_ratio'])
-            val_size = int(total_samples * config['val_ratio'])
-            train_idx = indices[:train_size]
-            val_idx = indices[train_size:train_size + val_size]
-            test_idx = indices[train_size + val_size:]
+    train_size = int(total_samples * config['train_ratio'])
+    val_size = int(total_samples * config['val_ratio'])
+    train_idx = indices[:train_size]
+    val_idx = indices[train_size:train_size + val_size]
+    test_idx = indices[train_size + val_size:]
     
     print(f"  Train samples: {len(train_idx)}")
     print(f"  Val samples: {len(val_idx)}")
