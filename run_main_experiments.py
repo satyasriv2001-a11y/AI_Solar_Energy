@@ -217,7 +217,7 @@ def run_all_experiments(output_dir=None):
             'experiment_name', 'model', 'complexity', 'feature_combo',
             'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2',
             'train_time_sec', 'test_samples', 'best_epoch', 'param_count',
-            'predicted_values'
+            'predicted_values', 'mean_predicted_value', 'experiment_datetime', 'test_period_start', 'test_period_end'
         ])
         results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         done_experiments = set()
@@ -317,8 +317,34 @@ def run_all_experiments(output_dir=None):
             predictions = metrics.get('predictions', np.array([]))
             if isinstance(predictions, np.ndarray):
                 predicted_values_str = ','.join([f'{val:.6f}' for val in predictions.flatten()])
+                # Calculate mean predicted value (representative value corresponding to RMSE)
+                mean_predicted_value = float(np.mean(predictions))
             else:
                 predicted_values_str = ''
+                mean_predicted_value = np.nan
+            
+            # Get experiment run timestamp
+            experiment_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Extract test period date range from metrics
+            test_dates = metrics.get('dates', [])
+            test_period_start = ''
+            test_period_end = ''
+            if test_dates:
+                # Convert dates to strings and sort
+                test_dates_str = []
+                for d in test_dates:
+                    if isinstance(d, str):
+                        test_dates_str.append(d)
+                    elif hasattr(d, 'strftime'):
+                        test_dates_str.append(d.strftime('%Y-%m-%d'))
+                    else:
+                        test_dates_str.append(str(d))
+                
+                if test_dates_str:
+                    test_dates_sorted = sorted(test_dates_str)
+                    test_period_start = test_dates_sorted[0]
+                    test_period_end = test_dates_sorted[-1]
             
             result = {
                 'experiment_name': exp_name,
@@ -334,7 +360,11 @@ def run_all_experiments(output_dir=None):
                 'test_samples': metrics.get('samples_count', 0),
                 'best_epoch': int(metrics.get('best_epoch', 0)) if not pd.isna(metrics.get('best_epoch', 0)) else 0,
                 'param_count': int(metrics.get('param_count', 0)),
-                'predicted_values': predicted_values_str
+                'predicted_values': predicted_values_str,
+                'mean_predicted_value': mean_predicted_value,
+                'experiment_datetime': experiment_datetime,
+                'test_period_start': test_period_start,
+                'test_period_end': test_period_end
             }
 
             print(f"  [OK] MAE: {metrics['mae']:.4f}, RMSE: {metrics['rmse']:.4f}")
@@ -357,7 +387,11 @@ def run_all_experiments(output_dir=None):
                 'mae': np.nan, 'rmse': np.nan, 'r2': np.nan,
                 'train_time_sec': 0, 'test_samples': 0,
                 'best_epoch': 0, 'param_count': 0,
-                'predicted_values': ''
+                'predicted_values': '',
+                'mean_predicted_value': np.nan,
+                'experiment_datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'test_period_start': '',
+                'test_period_end': ''
             }]).to_csv(output_file, mode='a', header=False, index=False, encoding='utf-8-sig')
             continue
 
