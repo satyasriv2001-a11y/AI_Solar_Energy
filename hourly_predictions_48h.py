@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Hourly Predictions for 48 Hours of Test Data
+Hourly Predictions for 24 Hours of Test Data
 
-For each hour in 48 hours of testing data, predict the next 24 hours' capacity factor.
-Each hour's prediction is saved as a separate CSV file.
+For each hour in 24 hours of testing data, predict the next 24 hours' capacity factor.
+Each hour's prediction is saved as a separate Google Sheet with plots.
 
 Usage:
-    python hourly_predictions_48h.py --data-path data/Project1140.csv --model-config <config_name>
     python hourly_predictions_48h.py --data-path data/Project1140.csv --model LSTM --complexity high --scenario PV+NWP
+    python hourly_predictions_48h.py --data-path data/Project1140.csv --model XGB --complexity high --scenario PV+NWP
+    
+Note: Requires Google Sheets API credentials. See README for setup instructions.
 """
 
 import pandas as pd
@@ -19,7 +21,19 @@ import time
 from datetime import datetime, timedelta
 import warnings
 import argparse
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
+
+# Google Sheets imports
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+    GSPREAD_AVAILABLE = True
+except ImportError:
+    GSPREAD_AVAILABLE = False
+    print("Warning: gspread not available. Install with: pip install gspread google-auth")
 
 # Suppress warnings
 os.environ['PYTHONWARNINGS'] = 'ignore'
@@ -304,16 +318,121 @@ def make_prediction_at_hour(model, config, df_clean, hist_feats, fcst_feats, sca
 # =============================================================================
 # MAIN FUNCTION
 # =============================================================================
-def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
+def save_to_google_sheets(df, sheet_name, credentials_path=None, spreadsheet_name=None):
+    """
+    Save DataFrame to Google Sheets.
+    
+    Args:
+        df: DataFrame to save
+        sheet_name: Name of the sheet
+        credentials_path: Path to Google service account JSON file
+        spreadsheet_name: Name of the Google Spreadsheet (will be created if doesn't exist)
+    
+    Returns:
+        URL of the created/updated sheet
+    """
+    if not GSPREAD_AVAILABLE:
+        raise ImportError("gspread is required. Install with: pip install gspread google-auth")
+    
+    if credentials_path is None:
+        # Try to find credentials in common locations
+        possible_paths = [
+            'credentials.json',
+            'service_account.json',
+            os.path.expanduser('~/.config/gspread/service_account.json')
+        ]
+        credentials_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                credentials_path = path
+                break
+        
+        if credentials_path is None:
+            raise FileNotFoundError(
+                "Google Sheets credentials not found. Please provide --credentials-path or "
+                "place credentials.json in the current directory."
+            )
+    
+    # Authenticate
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+    creds = Credentials.from_service_account_file(credentials_path, scopes=scope)
+    client = gspread.authorize(creds)
+    
+    # Get or create spreadsheet
+    if spreadsheet_name is None:
+        spreadsheet_name = "PV_Forecasting_Predictions"
+    
+    try:
+        spreadsheet = client.open(spreadsheet_name)
+    except gspread.SpreadsheetNotFound:
+        spreadsheet = client.create(spreadsheet_name)
+        # Share with yourself (optional)
+        # spreadsheet.share('your-email@gmail.com', perm_type='user', role='writer')
+    
+    # Create or get worksheet
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
+        # Clear existing data
+        worksheet.clear()
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
+    
+    # Update with new data
+    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+    
+    return spreadsheet.url
+
+
+def create_prediction_plot(pred_df, output_path, hour_num, pred_datetime):
+    """
+    Create a plot showing predicted vs actual capacity factor.
+    
+    Args:
+        pred_df: DataFrame with Datetime, Predicted_Capacity_Factor, Ground_Truth_Capacity_Factor
+        output_path: Path to save the plot
+        hour_num: Hour number for title
+        pred_datetime: Datetime of the prediction
+    """
+    plt.figure(figsize=(12, 6))
+    
+    # Plot predictions and ground truth
+    plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
+             label='Predicted', marker='o', linewidth=2, markersize=4)
+    
+    # Only plot ground truth if available (not all NaN)
+    if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
+        plt.plot(pred_df['Datetime'], pred_df['Ground_Truth_Capacity_Factor'], 
+                 label='Ground Truth', marker='s', linewidth=2, markersize=4, alpha=0.7)
+    
+    plt.xlabel('Datetime', fontsize=12)
+    plt.ylabel('Capacity Factor (%)', fontsize=12)
+    plt.title(f'Hour {hour_num}: 24-Hour Capacity Factor Prediction\n'
+              f'Prediction made at: {pred_datetime.strftime("%Y-%m-%d %H:00")}', fontsize=14)
+    plt.legend(fontsize=11)
+    plt.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Save plot
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def run_hourly_predictions(data_path, config, output_dir, test_hours=24, 
+                           credentials_path=None, spreadsheet_name=None, save_plots=True):
     """
     Run hourly predictions for test_hours consecutive hours from test data.
-    Each hour's prediction (next 24 hours) is saved as a separate CSV file.
+    Each hour's prediction (next 24 hours) is saved as a separate Google Sheet with plot.
     
     Args:
         data_path: Path to data CSV file
         config: Model configuration
-        output_dir: Directory to save prediction CSV files
-        test_hours: Number of consecutive hours from test data to use (default: 48)
+        output_dir: Directory to save prediction plots
+        test_hours: Number of consecutive hours from test data to use (default: 24)
+        credentials_path: Path to Google service account JSON file
+        spreadsheet_name: Name of the Google Spreadsheet
+        save_plots: Whether to save plots (default: True)
     """
     # Ensure test_hours is a Python int (not numpy array/scalar)
     if isinstance(test_hours, np.ndarray):
@@ -466,14 +585,33 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
                 'Ground_Truth_Capacity_Factor': gt
             })
             
-            # Save to CSV
-            # Format: predictions_hour_001_YYYY-MM-DD_HH.csv
+            # Format datetime for display
             timestamp_str = pred_datetime.strftime('%Y-%m-%d_%H')
-            output_file = os.path.join(output_dir, f"predictions_hour_{hour_num:03d}_{timestamp_str}.csv")
-            pred_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+            sheet_name = f"Hour_{hour_num:03d}_{timestamp_str}"
             
-            if hour_num % 10 == 0 or hour_num == len(test_hour_indices):
-                print(f"  [{hour_num}/{len(test_hour_indices)}] Saved: {output_file}")
+            # Save to Google Sheets
+            try:
+                sheet_url = save_to_google_sheets(
+                    pred_df, sheet_name, credentials_path, spreadsheet_name
+                )
+                
+                if hour_num == 1:
+                    print(f"  Google Spreadsheet: {sheet_url}")
+                
+            except Exception as e:
+                print(f"  [WARNING] Failed to save to Google Sheets: {str(e)}")
+                print(f"  Saving to CSV instead...")
+                # Fallback to CSV
+                output_file = os.path.join(output_dir, f"predictions_hour_{hour_num:03d}_{timestamp_str}.csv")
+                pred_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+            
+            # Create and save plot
+            if save_plots:
+                plot_file = os.path.join(output_dir, f"plot_hour_{hour_num:03d}_{timestamp_str}.png")
+                create_prediction_plot(pred_df, plot_file, hour_num, pred_datetime)
+            
+            if hour_num % 5 == 0 or hour_num == len(test_hour_indices):
+                print(f"  [{hour_num}/{len(test_hour_indices)}] Completed: {sheet_name}")
         
         except Exception as e:
             print(f"  [ERROR] Hour {hour_num} failed: {str(e)}")
@@ -483,7 +621,10 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     
     print(f"\n{'='*80}")
     print(f"[SUCCESS] Completed predictions for {len(test_hour_indices)} hours")
-    print(f"Prediction files saved to: {output_dir}")
+    if save_plots:
+        print(f"Plots saved to: {output_dir}")
+    if GSPREAD_AVAILABLE and credentials_path:
+        print(f"Google Sheets: Check your Google Drive for the spreadsheet")
     print(f"{'='*80}")
 
 
@@ -528,10 +669,16 @@ Examples:
                        help='Use time encoding features (default: True)')
     parser.add_argument('--no-time-encoding', dest='use_time_encoding', action='store_false',
                        help='Disable time encoding features')
-    parser.add_argument('--test-hours', type=int, default=48,
-                       help='Number of consecutive hours from test data to use (default: 48)')
+    parser.add_argument('--test-hours', type=int, default=24,
+                       help='Number of consecutive hours from test data to use (default: 24)')
     parser.add_argument('--output-dir', type=str, default=None,
-                       help='Output directory for prediction CSV files (default: ./hourly_predictions_<model>_<scenario>)')
+                       help='Output directory for prediction plots (default: ./hourly_predictions_<model>_<scenario>)')
+    parser.add_argument('--credentials-path', type=str, default=None,
+                       help='Path to Google service account JSON file (default: looks for credentials.json)')
+    parser.add_argument('--spreadsheet-name', type=str, default=None,
+                       help='Name of Google Spreadsheet (default: PV_Forecasting_Predictions)')
+    parser.add_argument('--no-plots', dest='save_plots', action='store_false', default=True,
+                       help='Disable saving plots')
     
     args = parser.parse_args()
     
@@ -549,7 +696,12 @@ Examples:
     
     # Run predictions
     try:
-        run_hourly_predictions(args.data_path, config, output_dir, args.test_hours)
+        run_hourly_predictions(
+            args.data_path, config, output_dir, args.test_hours,
+            credentials_path=args.credentials_path,
+            spreadsheet_name=args.spreadsheet_name,
+            save_plots=args.save_plots
+        )
     except Exception as e:
         print(f"\n[ERROR] Failed: {str(e)}")
         import traceback
