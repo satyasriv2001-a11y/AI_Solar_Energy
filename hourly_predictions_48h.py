@@ -177,6 +177,11 @@ def make_prediction_at_hour(model, config, df_clean, hist_feats, fcst_feats, sca
     """
     import torch
     
+    # Ensure hour_idx is a scalar integer
+    hour_idx = int(hour_idx)
+    past_hours = int(past_hours)
+    future_hours = int(future_hours)
+    
     # Get historical data (past_hours before hour_idx)
     hist_start = max(0, hour_idx - past_hours)
     hist_end = hour_idx
@@ -378,14 +383,14 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     # But we want to predict from each hour, not from each sliding window start
     
     # Get the first test sample's starting index in df_clean
-    first_test_sample_idx = test_idx[0]
+    first_test_sample_idx = int(test_idx[0])  # Ensure it's a scalar integer
     first_test_start_in_df = past_hours + first_test_sample_idx
     
     # Use 48 consecutive hours starting from the first test sample's start
     # Each hour will be used to predict the next 24 hours
     test_hour_indices = []
     for i in range(test_hours):
-        hour_idx = first_test_start_in_df + i
+        hour_idx = int(first_test_start_in_df + i)  # Ensure it's a scalar integer
         # Make sure we have enough data after this hour for prediction
         if hour_idx >= 0 and hour_idx < len(df_clean) - future_hours:
             test_hour_indices.append(hour_idx)
@@ -395,9 +400,6 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=48):
     if len(test_hour_indices) < test_hours:
         print(f"  Warning: Only found {len(test_hour_indices)} valid test hours (requested {test_hours})")
         print(f"  Using available hours: {len(test_hour_indices)}")
-    
-    if len(test_hour_indices) < test_hours:
-        print(f"  Warning: Only found {len(test_hour_indices)} valid test hours (requested {test_hours})")
     
     print(f"  Making predictions for {len(test_hour_indices)} hours...")
     
