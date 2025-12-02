@@ -24,6 +24,7 @@ import argparse
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
+from matplotlib.dates import HourLocator, DateFormatter
 warnings.filterwarnings('ignore')
 
 # Google Sheets imports
@@ -428,7 +429,8 @@ def create_overlay_plot(all_predictions, output_path, model_name):
         output_path: Path to save the plot
         model_name: Name of the model for the title
     """
-    plt.figure(figsize=(16, 10))
+    # Increase figure size to stretch out x-axis for better visibility
+    plt.figure(figsize=(24, 10))
     
     # Collect all unique datetimes and create a comprehensive timeline
     all_datetimes = set()
@@ -465,14 +467,31 @@ def create_overlay_plot(all_predictions, output_path, model_name):
                 label='Ground Truth', linewidth=3, color='black', marker='o', 
                 markersize=6, alpha=0.9, zorder=100)
     
+    # Set x-axis limits to span all datetimes with some padding
+    if all_datetimes:
+        x_min = min(all_datetimes)
+        x_max = max(all_datetimes)
+        # Add padding (2% on each side)
+        x_range = x_max - x_min
+        plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+    
+    # Format x-axis with more frequent ticks for better readability
+    ax = plt.gca()
+    if all_datetimes:
+        # Set major ticks every 6 hours
+        ax.xaxis.set_major_locator(HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+        # Set minor ticks every hour
+        ax.xaxis.set_minor_locator(HourLocator(interval=1))
+    
     plt.xlabel('Datetime', fontsize=14, fontweight='bold')
     plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
     plt.title(f'All Predictions Overlay - {model_name}\n'
               f'{len(all_predictions)} hours of predictions (24-hour ahead forecasts)', 
               fontsize=16, fontweight='bold')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, ncol=1)
-    plt.grid(True, alpha=0.3)
-    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3, which='both')
+    plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     
     # Save plot
@@ -591,12 +610,8 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
     # The test_idx refers to sliding window samples, we need to map back to df_clean indices
     print("\n[4/4] Making hourly predictions...")
     
-    # The sliding window creation starts from index 'past_hours' in df_clean
-    # So test sample i corresponds to starting index: past_hours + test_idx[i] in df_clean
-    # But we want to predict from each hour, not from each sliding window start
-    
-    # Get the first test sample's starting index in df_clean
-    # Ensure test_idx[0] is converted to Python int
+    # Find the start date: June 20th at 00:00
+    # Determine the year from the test data (use the first test sample's year)
     if len(test_idx) == 0:
         raise ValueError("No test samples available. Check data split ratios.")
     
@@ -609,13 +624,36 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
     first_test_sample_idx = int(test_idx_list[0])  # Ensure it's a scalar integer
     first_test_start_in_df = int(past_hours) + first_test_sample_idx
     
-    # Use 48 consecutive hours starting from the first test sample's start
+    # Get the year from the first test sample
+    first_test_datetime = df_clean.iloc[first_test_start_in_df]['Datetime']
+    target_year = first_test_datetime.year
+    
+    # Find June 20th at 00:00 in the dataframe
+    target_date = pd.Timestamp(year=target_year, month=6, day=20, hour=0, minute=0)
+    
+    # Find the index in df_clean that matches or is closest to this date
+    start_idx = None
+    for idx in range(len(df_clean)):
+        if df_clean.iloc[idx]['Datetime'] >= target_date:
+            start_idx = idx
+            break
+    
+    # If we couldn't find June 20th, try to find it in the test range or use first test sample
+    if start_idx is None or start_idx < first_test_start_in_df:
+        print(f"  Warning: Could not find June 20, {target_year} 00:00 in test data.")
+        print(f"  Using first test sample start instead: {df_clean.iloc[first_test_start_in_df]['Datetime']}")
+        start_idx = first_test_start_in_df
+    else:
+        actual_start_date = df_clean.iloc[start_idx]['Datetime']
+        print(f"  Starting predictions from: {actual_start_date.strftime('%Y-%m-%d %H:00')}")
+    
+    # Use consecutive hours starting from the target date
     # Each hour will be used to predict the next 24 hours
     # test_hours is already converted to int at function start
     future_hours_int = int(future_hours)
     test_hour_indices = []
     for i in range(test_hours):
-        hour_idx = int(first_test_start_in_df + i)  # Ensure it's a scalar integer
+        hour_idx = int(start_idx + i)  # Ensure it's a scalar integer
         # Make sure we have enough data after this hour for prediction
         if hour_idx >= 0 and hour_idx < len(df_clean) - future_hours_int:
             test_hour_indices.append(hour_idx)
