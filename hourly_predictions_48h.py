@@ -862,20 +862,56 @@ def run_all_plants(data_dir="data", test_hours=24, output_base_dir=None,
     import glob
     
     # Find all CSV files in data directory
-    data_pattern = os.path.join(data_dir, "*.csv")
-    data_files = glob.glob(data_pattern)
+    # Try multiple patterns to be more flexible
+    data_patterns = [
+        os.path.join(data_dir, "*.csv"),
+        os.path.join(data_dir, "**", "*.csv"),  # Recursive search
+        os.path.join(".", data_dir, "*.csv"),
+        os.path.join(".", data_dir, "**", "*.csv"),
+    ]
     
-    if len(data_files) == 0:
+    data_files = []
+    for pattern in data_patterns:
+        found_files = glob.glob(pattern, recursive=True)
+        data_files.extend(found_files)
+    
+    # Remove duplicates and sort
+    data_files = sorted(list(set(data_files)))
+    
+    # Filter to only include files that look like plant data (optional: can be removed if too restrictive)
+    # This helps avoid picking up other CSV files that might not be plant data
+    plant_files = [f for f in data_files if os.path.isfile(f)]
+    
+    if len(plant_files) == 0:
+        print(f"Warning: No CSV files found in {data_dir}")
+        print(f"Tried patterns: {data_patterns}")
+        print(f"Current working directory: {os.getcwd()}")
+        if os.path.exists(data_dir):
+            print(f"Contents of {data_dir}:")
+            try:
+                for item in os.listdir(data_dir):
+                    print(f"  - {item}")
+            except Exception as e:
+                print(f"  Error listing directory: {e}")
         raise FileNotFoundError(f"No CSV files found in {data_dir}")
     
     print("=" * 80)
-    print("Running Predictions on All Plants")
+    print("Running Predictions on ALL PLANTS")
     print("=" * 80)
-    print(f"Model: XGB (high complexity, PV+NWP, no TE)")
-    print(f"Found {len(data_files)} plant(s):")
-    for f in data_files:
-        print(f"  - {os.path.basename(f)}")
+    print("CONFIGURATION (FIXED - Cannot be changed):")
+    print("  Model: XGB")
+    print("  Complexity: high")
+    print("  Scenario: PV+NWP")
+    print("  Lookback: 24 hours")
+    print("  Time Encoding: DISABLED (no TE)")
+    print("=" * 80)
+    print(f"Data directory: {os.path.abspath(data_dir)}")
+    print(f"Found {len(plant_files)} plant file(s):")
+    for idx, f in enumerate(plant_files, 1):
+        print(f"  [{idx}/{len(plant_files)}] {os.path.basename(f)}")
     print(f"Test hours per plant: {test_hours}")
+    print("=" * 80)
+    print("NOTE: This will process ALL plants found above with XGB high PV+NWP 24h no TE ONLY.")
     print("=" * 80)
     
     # Set output base directory
@@ -883,20 +919,27 @@ def run_all_plants(data_dir="data", test_hours=24, output_base_dir=None,
         output_base_dir = os.path.join(script_dir, "all_plants_predictions")
     os.makedirs(output_base_dir, exist_ok=True)
     
-    # Fixed configuration for all plants
+    # Fixed configuration for all plants - XGB high complexity PV+NWP 24h no TE ONLY
     config_template = {
         'model': 'XGB',
         'model_complexity': 'high',
         'scenario': 'PV+NWP',
-        'use_time_encoding': False,
-        'lookback': 24
+        'use_time_encoding': False,  # NO time encoding
+        'lookback': 24  # 24 hours lookback
     }
+    
+    # Verify configuration is correct
+    assert config_template['model'] == 'XGB', "Model must be XGB"
+    assert config_template['model_complexity'] == 'high', "Complexity must be high"
+    assert config_template['scenario'] == 'PV+NWP', "Scenario must be PV+NWP"
+    assert config_template['use_time_encoding'] == False, "Time encoding must be disabled (no TE)"
+    assert config_template['lookback'] == 24, "Lookback must be 24 hours"
     
     # Store all plant predictions for master overlay
     all_plant_predictions = []
     
     # Process each plant
-    for plant_file in sorted(data_files):
+    for plant_file in plant_files:
         plant_basename = os.path.basename(plant_file)
         plant_name = os.path.splitext(plant_basename)[0]  # Remove .csv extension
         
@@ -1021,6 +1064,18 @@ Examples:
                        help='Disable saving plots')
     
     args = parser.parse_args()
+    
+    # Print what mode we're running in
+    if args.all_plants:
+        print("\n" + "=" * 80)
+        print("MODE: Running on ALL PLANTS")
+        print("Algorithm: XGB high complexity, PV+NWP, NO time encoding")
+        print("=" * 80 + "\n")
+    else:
+        print("\n" + "=" * 80)
+        print("MODE: Single plant mode")
+        print(f"Algorithm: {args.model} {args.complexity} {args.scenario}")
+        print("=" * 80 + "\n")
     
     # Run on all plants if requested
     if args.all_plants:
