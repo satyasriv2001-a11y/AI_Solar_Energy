@@ -420,9 +420,99 @@ def create_prediction_plot(pred_df, output_path, hour_num, pred_datetime):
     plt.close()
 
 
+def create_multi_plant_overlay_plot(all_plant_predictions, output_path, model_name):
+    """
+    Create an overlay plot showing all predictions from all plants.
+    
+    Args:
+        all_plant_predictions: List of tuples (plant_name, all_predictions_list)
+            where all_predictions_list is list of tuples (pred_df, hour_num, pred_datetime)
+        output_path: Path to save the plot
+        model_name: Name of the model for the title
+    """
+    # Increase figure size to stretch out x-axis for better visibility
+    plt.figure(figsize=(28, 10))
+    
+    # Collect all unique datetimes from all plants
+    all_datetimes = set()
+    for plant_name, plant_predictions in all_plant_predictions:
+        for pred_df, _, _ in plant_predictions:
+            all_datetimes.update(pred_df['Datetime'])
+    
+    all_datetimes = sorted(list(all_datetimes))
+    
+    # Use distinct colors for each plant
+    plant_colors = plt.cm.Set1(np.linspace(0, 1, len(all_plant_predictions)))
+    
+    # Plot each plant's predictions
+    for plant_idx, (plant_name, plant_predictions) in enumerate(all_plant_predictions):
+        plant_color = plant_colors[plant_idx]
+        # Use slightly different shades for different hours within the same plant
+        hour_colors = plt.cm.Blues(np.linspace(0.4, 0.8, len(plant_predictions)))
+        
+        for hour_idx, (pred_df, hour_num, pred_datetime) in enumerate(plant_predictions):
+            # Plot predictions with plant-specific color
+            alpha = 0.5 if len(all_plant_predictions) > 1 else 0.6
+            plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
+                    label=f'{plant_name} - Hour {hour_num}',
+                    linewidth=1.5, alpha=alpha, color=plant_color, linestyle='-')
+    
+    # Collect and plot ground truth from all plants (combine all ground truth values)
+    gt_dict = {}  # datetime -> capacity_factor
+    for plant_name, plant_predictions in all_plant_predictions:
+        for pred_df, _, _ in plant_predictions:
+            if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
+                for dt, gt_val in zip(pred_df['Datetime'], pred_df['Ground_Truth_Capacity_Factor']):
+                    if not pd.isna(gt_val):
+                        # If multiple predictions have the same datetime, use the first non-NaN value
+                        if dt not in gt_dict or pd.isna(gt_dict[dt]):
+                            gt_dict[dt] = gt_val
+    
+    # Plot ground truth if available
+    if gt_dict:
+        gt_datetimes = sorted(gt_dict.keys())
+        gt_values = [gt_dict[dt] for dt in gt_datetimes]
+        plt.plot(gt_datetimes, gt_values, 
+                label='Ground Truth', linewidth=3, color='black', marker='o', 
+                markersize=6, alpha=0.9, zorder=100)
+    
+    # Set x-axis limits to span all datetimes with some padding
+    if all_datetimes:
+        x_min = min(all_datetimes)
+        x_max = max(all_datetimes)
+        # Add padding (2% on each side)
+        x_range = x_max - x_min
+        plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+    
+    # Format x-axis with more frequent ticks for better readability
+    ax = plt.gca()
+    if all_datetimes:
+        # Set major ticks every 6 hours
+        ax.xaxis.set_major_locator(HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+        # Set minor ticks every hour
+        ax.xaxis.set_minor_locator(HourLocator(interval=1))
+    
+    plt.xlabel('Datetime', fontsize=14, fontweight='bold')
+    plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+    total_hours = sum(len(preds) for _, preds in all_plant_predictions)
+    plt.title(f'All Plants Predictions Overlay - {model_name}\n'
+              f'{len(all_plant_predictions)} plants, {total_hours} total prediction hours (24-hour ahead forecasts)', 
+              fontsize=16, fontweight='bold')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, ncol=1)
+    plt.grid(True, alpha=0.3, which='both')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    # Save plot
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"  Multi-plant overlay plot saved: {output_path}")
+
+
 def create_overlay_plot(all_predictions, output_path, model_name):
     """
-    Create an overlay plot showing all predictions and ground truth.
+    Create an overlay plot showing all predictions and ground truth for a single plant.
     
     Args:
         all_predictions: List of tuples (pred_df, hour_num, pred_datetime)
@@ -501,7 +591,8 @@ def create_overlay_plot(all_predictions, output_path, model_name):
 
 
 def run_hourly_predictions(data_path, config, output_dir, test_hours=24, 
-                           credentials_path=None, spreadsheet_name=None, save_plots=True):
+                           credentials_path=None, spreadsheet_name=None, save_plots=True, 
+                           plant_name=None, return_predictions=False):
     """
     Run hourly predictions for test_hours consecutive hours from test data.
     Each hour's prediction (next 24 hours) is saved as a separate Google Sheet with plot.
@@ -514,6 +605,11 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
         credentials_path: Path to Google service account JSON file
         spreadsheet_name: Name of the Google Spreadsheet
         save_plots: Whether to save plots (default: True)
+        plant_name: Name of the plant (for labeling)
+        return_predictions: If True, return all_predictions list for overlay plotting
+    
+    Returns:
+        all_predictions list if return_predictions=True, else None
     """
     # Ensure test_hours is a Python int (not numpy array/scalar)
     if isinstance(test_hours, np.ndarray):
@@ -740,6 +836,129 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
     if GSPREAD_AVAILABLE and credentials_path:
         print(f"Google Sheets: Check your Google Drive for the spreadsheet")
     print(f"{'='*80}")
+    
+    if return_predictions:
+        return all_predictions
+    return None
+
+
+# =============================================================================
+# MULTI-PLANT RUNNER
+# =============================================================================
+def run_all_plants(data_dir="data", test_hours=24, output_base_dir=None, 
+                   credentials_path=None, spreadsheet_name=None, save_plots=True):
+    """
+    Run predictions on all plant CSV files in the data directory.
+    Uses XGB high complexity, PV+NWP scenario, no time encoding.
+    
+    Args:
+        data_dir: Directory containing plant CSV files
+        test_hours: Number of consecutive hours from test data to use
+        output_base_dir: Base directory for outputs (default: ./all_plants_predictions)
+        credentials_path: Path to Google service account JSON file
+        spreadsheet_name: Name prefix for Google Spreadsheet (each plant gets its own)
+        save_plots: Whether to save plots (default: True)
+    """
+    import glob
+    
+    # Find all CSV files in data directory
+    data_pattern = os.path.join(data_dir, "*.csv")
+    data_files = glob.glob(data_pattern)
+    
+    if len(data_files) == 0:
+        raise FileNotFoundError(f"No CSV files found in {data_dir}")
+    
+    print("=" * 80)
+    print("Running Predictions on All Plants")
+    print("=" * 80)
+    print(f"Model: XGB (high complexity, PV+NWP, no TE)")
+    print(f"Found {len(data_files)} plant(s):")
+    for f in data_files:
+        print(f"  - {os.path.basename(f)}")
+    print(f"Test hours per plant: {test_hours}")
+    print("=" * 80)
+    
+    # Set output base directory
+    if output_base_dir is None:
+        output_base_dir = os.path.join(script_dir, "all_plants_predictions")
+    os.makedirs(output_base_dir, exist_ok=True)
+    
+    # Fixed configuration for all plants
+    config_template = {
+        'model': 'XGB',
+        'model_complexity': 'high',
+        'scenario': 'PV+NWP',
+        'use_time_encoding': False,
+        'lookback': 24
+    }
+    
+    # Store all plant predictions for master overlay
+    all_plant_predictions = []
+    
+    # Process each plant
+    for plant_file in sorted(data_files):
+        plant_basename = os.path.basename(plant_file)
+        plant_name = os.path.splitext(plant_basename)[0]  # Remove .csv extension
+        
+        print(f"\n{'='*80}")
+        print(f"Processing Plant: {plant_name}")
+        print(f"{'='*80}")
+        
+        # Create config for this plant
+        config = create_config_from_args(
+            plant_file, 
+            config_template['model'],
+            config_template['model_complexity'],
+            config_template['scenario'],
+            config_template['lookback'],
+            config_template['use_time_encoding']
+        )
+        
+        # Create output directory for this plant
+        plant_output_dir = os.path.join(output_base_dir, plant_name)
+        
+        # Create spreadsheet name for this plant
+        plant_spreadsheet_name = f"{spreadsheet_name or 'PV_Forecasting'}_{plant_name}"
+        
+        try:
+            # Run predictions for this plant
+            plant_predictions = run_hourly_predictions(
+                plant_file, config, plant_output_dir, test_hours,
+                credentials_path=credentials_path,
+                spreadsheet_name=plant_spreadsheet_name,
+                save_plots=save_plots,
+                plant_name=plant_name,
+                return_predictions=True
+            )
+            
+            if plant_predictions:
+                all_plant_predictions.append((plant_name, plant_predictions))
+                print(f"\n[SUCCESS] Completed {plant_name}: {len(plant_predictions)} predictions")
+            else:
+                print(f"\n[WARNING] No predictions returned for {plant_name}")
+        
+        except Exception as e:
+            print(f"\n[ERROR] Failed to process {plant_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    # Create master overlay plot with all plants
+    if save_plots and len(all_plant_predictions) > 0:
+        master_overlay_path = os.path.join(output_base_dir, "all_plants_overlay.png")
+        model_name = "XGB_high_PV+NWP_noTE"
+        print(f"\n{'='*80}")
+        print("Creating master overlay plot with all plants...")
+        print(f"{'='*80}")
+        create_multi_plant_overlay_plot(all_plant_predictions, master_overlay_path, model_name)
+        
+        print(f"\n{'='*80}")
+        print(f"[SUCCESS] Completed all plants")
+        print(f"Individual plant results: {output_base_dir}")
+        print(f"Master overlay plot: {master_overlay_path}")
+        print(f"{'='*80}")
+    else:
+        print(f"\n[WARNING] No predictions to create overlay plot")
 
 
 # =============================================================================
@@ -747,17 +966,20 @@ def run_hourly_predictions(data_path, config, output_dir, test_hours=24,
 # =============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Make hourly predictions for 48 hours of test data. Each hour predicts next 24 hours.',
+        description='Make hourly predictions for test data. Each hour predicts next 24 hours.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Use default model (LSTM high complexity, PV+NWP scenario)
+  # Run on all plants with XGB high complexity PV+NWP no TE
+  python hourly_predictions_48h.py --all-plants
+  
+  # Use default model (LSTM high complexity, PV+NWP scenario) on single plant
   python hourly_predictions_48h.py --data-path data/Project1140.csv
   
-  # Specify model and scenario
+  # Specify model and scenario on single plant
   python hourly_predictions_48h.py --data-path data/Project1140.csv --model LSTM --complexity high --scenario PV+NWP
   
-  # Use different model
+  # Use different model on single plant
   python hourly_predictions_48h.py --data-path data/Project1140.csv --model XGB --complexity high --scenario PV+NWP
   
   # Use different number of test hours
@@ -765,8 +987,12 @@ Examples:
         """
     )
     
-    parser.add_argument('--data-path', type=str, required=True,
-                       help='Path to data CSV file (e.g., data/Project1140.csv)')
+    parser.add_argument('--all-plants', action='store_true', default=False,
+                       help='Run on all plants in data directory (uses XGB high PV+NWP no TE)')
+    parser.add_argument('--data-path', type=str, default=None,
+                       help='Path to data CSV file (e.g., data/Project1140.csv). Required if --all-plants not used.')
+    parser.add_argument('--data-dir', type=str, default='data',
+                       help='Directory containing plant CSV files (default: data). Used with --all-plants.')
     parser.add_argument('--model', type=str, default='LSTM',
                        choices=['LSTM', 'GRU', 'Transformer', 'TCN', 'RF', 'XGB', 'LGBM', 'Linear'],
                        help='Model to use (default: LSTM)')
@@ -796,29 +1022,50 @@ Examples:
     
     args = parser.parse_args()
     
-    # Create config
-    config = create_config_from_args(
-        args.data_path, args.model, args.complexity, args.scenario,
-        args.lookback, args.use_time_encoding
-    )
-    
-    # Set output directory
-    if args.output_dir is None:
-        output_dir = os.path.join(script_dir, f"hourly_predictions_{args.model}_{args.scenario}")
+    # Run on all plants if requested
+    if args.all_plants:
+        try:
+            run_all_plants(
+                data_dir=args.data_dir,
+                test_hours=args.test_hours,
+                output_base_dir=args.output_dir,
+                credentials_path=args.credentials_path,
+                spreadsheet_name=args.spreadsheet_name,
+                save_plots=args.save_plots
+            )
+        except Exception as e:
+            print(f"\n[ERROR] Failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
     else:
-        output_dir = args.output_dir
-    
-    # Run predictions
-    try:
-        run_hourly_predictions(
-            args.data_path, config, output_dir, args.test_hours,
-            credentials_path=args.credentials_path,
-            spreadsheet_name=args.spreadsheet_name,
-            save_plots=args.save_plots
+        # Single plant mode
+        if args.data_path is None:
+            parser.error("--data-path is required unless --all-plants is used")
+        
+        # Create config
+        config = create_config_from_args(
+            args.data_path, args.model, args.complexity, args.scenario,
+            args.lookback, args.use_time_encoding
         )
-    except Exception as e:
-        print(f"\n[ERROR] Failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        
+        # Set output directory
+        if args.output_dir is None:
+            output_dir = os.path.join(script_dir, f"hourly_predictions_{args.model}_{args.scenario}")
+        else:
+            output_dir = args.output_dir
+        
+        # Run predictions
+        try:
+            run_hourly_predictions(
+                args.data_path, config, output_dir, args.test_hours,
+                credentials_path=args.credentials_path,
+                spreadsheet_name=args.spreadsheet_name,
+                save_plots=args.save_plots
+            )
+        except Exception as e:
+            print(f"\n[ERROR] Failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
