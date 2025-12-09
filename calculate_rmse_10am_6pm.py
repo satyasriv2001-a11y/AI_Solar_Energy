@@ -34,10 +34,18 @@ def calculate_rmse_10am_6pm(predictions_dir):
     print("Calculating RMSE (10 AM - 6 PM) for All Plants")
     print("=" * 80)
     print(f"Predictions directory: {os.path.abspath(predictions_dir)}")
+    print(f"Directory exists: {os.path.exists(predictions_dir)}")
+    if os.path.exists(predictions_dir):
+        contents = os.listdir(predictions_dir)
+        print(f"Directory contents ({len(contents)} items): {contents[:10]}")
     print("=" * 80)
     
     if not os.path.exists(predictions_dir):
         raise FileNotFoundError(f"Predictions directory not found: {predictions_dir}")
+    
+    # Ensure we can write to the directory
+    if not os.access(predictions_dir, os.W_OK):
+        print(f"[WARNING] Directory may not be writable: {predictions_dir}")
     
     # Find all plant folders (directories in predictions_dir)
     plant_folders = []
@@ -168,8 +176,15 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 plant_rmse_file = os.path.join(plant_folder, 'rmse_10am_6pm.csv')
                 plant_rmse_df.to_csv(plant_rmse_file, index=False)
                 print(f"  Saved: {plant_rmse_file}")
+                # Verify file was created
+                if os.path.exists(plant_rmse_file):
+                    print(f"  [VERIFIED] File exists: {os.path.abspath(plant_rmse_file)}")
+                else:
+                    print(f"  [ERROR] File was not created: {plant_rmse_file}")
             except Exception as e:
                 print(f"  [ERROR] Failed to save RMSE file: {str(e)}")
+                import traceback
+                traceback.print_exc()
         else:
             print(f"  [WARNING] No valid data points found for RMSE calculation")
             print(f"  [DEBUG] Total files processed: {len(prediction_files)}")
@@ -177,26 +192,60 @@ def calculate_rmse_10am_6pm(predictions_dir):
     
     # Create summary CSV with all plants' RMSE values
     if len(all_plant_results) > 0:
-        summary_df = pd.DataFrame(all_plant_results)
-        summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm_summary.csv')
-        summary_df.to_csv(summary_file, index=False)
-        
-        print(f"\n{'='*80}")
-        print("[SUCCESS] RMSE Calculation Completed!")
-        print(f"{'='*80}")
-        print(f"\nSummary:")
-        print(f"  Total plants processed: {len(all_plant_results)}")
-        print(f"  Average RMSE (10 AM - 6 PM): {summary_df['RMSE_10AM_6PM'].mean():.4f}")
-        print(f"  Min RMSE: {summary_df['RMSE_10AM_6PM'].min():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmin(), 'Plant_Name']})")
-        print(f"  Max RMSE: {summary_df['RMSE_10AM_6PM'].max():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmax(), 'Plant_Name']})")
-        print(f"\nSummary file saved: {summary_file}")
-        print(f"{'='*80}")
-        
-        # Display summary table
-        print("\nRMSE Summary Table:")
-        print(summary_df.to_string(index=False))
+        try:
+            summary_df = pd.DataFrame(all_plant_results)
+            summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm_summary.csv')
+            summary_df.to_csv(summary_file, index=False)
+            
+            # Verify summary file was created
+            if os.path.exists(summary_file):
+                print(f"\n{'='*80}")
+                print("[SUCCESS] RMSE Calculation Completed!")
+                print(f"{'='*80}")
+                print(f"\nSummary:")
+                print(f"  Total plants processed: {len(all_plant_results)}")
+                print(f"  Average RMSE (10 AM - 6 PM): {summary_df['RMSE_10AM_6PM'].mean():.4f}")
+                print(f"  Min RMSE: {summary_df['RMSE_10AM_6PM'].min():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmin(), 'Plant_Name']})")
+                print(f"  Max RMSE: {summary_df['RMSE_10AM_6PM'].max():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmax(), 'Plant_Name']})")
+                print(f"\nSummary file saved: {os.path.abspath(summary_file)}")
+                print(f"[VERIFIED] Summary file exists: {os.path.exists(summary_file)}")
+                print(f"{'='*80}")
+                
+                # Display summary table
+                print("\nRMSE Summary Table:")
+                print(summary_df.to_string(index=False))
+                
+                # List all RMSE files created
+                print(f"\n{'='*80}")
+                print("RMSE Files Created:")
+                print(f"{'='*80}")
+                rmse_files_found = 0
+                for plant_folder in plant_folders:
+                    rmse_file = os.path.join(plant_folder, 'rmse_10am_6pm.csv')
+                    if os.path.exists(rmse_file):
+                        print(f"  ✓ {os.path.basename(plant_folder)}/rmse_10am_6pm.csv")
+                        print(f"     Full path: {os.path.abspath(rmse_file)}")
+                        rmse_files_found += 1
+                    else:
+                        print(f"  ✗ {os.path.basename(plant_folder)}/rmse_10am_6pm.csv (NOT FOUND)")
+                
+                print(f"\nTotal RMSE files created: {rmse_files_found}/{len(plant_folders)}")
+                print(f"Summary file location: {os.path.abspath(summary_file)}")
+                print(f"{'='*80}")
+            else:
+                print(f"\n[ERROR] Summary file was not created: {summary_file}")
+                print(f"  Directory exists: {os.path.exists(predictions_dir)}")
+                print(f"  Directory writable: {os.access(predictions_dir, os.W_OK)}")
+        except Exception as e:
+            print(f"\n[ERROR] Failed to create summary file: {str(e)}")
+            import traceback
+            traceback.print_exc()
     else:
         print(f"\n[WARNING] No RMSE values calculated for any plants")
+        print(f"  This could mean:")
+        print(f"    - No prediction files found")
+        print(f"    - No data in 10 AM - 6 PM time range")
+        print(f"    - Missing required columns in prediction files")
 
 
 def main():
