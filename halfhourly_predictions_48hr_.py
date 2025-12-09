@@ -858,3 +858,35 @@ Examples:
                        help='Disable saving plots')
     
     args = parser.parse_args()
+    
+    print("\n" + "=" * 80)
+    print("MODE: Half-hourly predictions (30-minute resolution)")
+    print(f"Algorithm: {args.model} {args.complexity} {args.scenario}")
+    print("=" * 80 + "\n")
+    
+    # Create config
+    config = create_config_from_args(
+        args.data_path, args.model, args.complexity, args.scenario,
+        args.lookback, args.use_time_encoding
+    )
+    
+    # Set output directory
+    if args.output_dir is None:
+        output_dir = os.path.join(script_dir, f"halfhourly_predictions_{args.model}_{args.scenario}")
+    else:
+        output_dir = args.output_dir
+    
+    # Run predictions
+    try:
+        run_halfhourly_predictions(
+            args.data_path, config, output_dir, args.test_halfhours,
+            credentials_path=args.credentials_path,
+            spreadsheet_name=args.spreadsheet_name,
+            save_plots=args.save_plots
+        )
+    except Exception as e:
+        print(f"\n[ERROR] Failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
