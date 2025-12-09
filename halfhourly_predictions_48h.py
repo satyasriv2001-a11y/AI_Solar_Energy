@@ -559,6 +559,14 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
         print("  Detected hourly resolution data (no Minute column)")
         print("  Interpolating to 30-minute resolution...")
         
+        # Remove duplicate timestamps before resampling
+        # Keep the first occurrence of each duplicate timestamp
+        df = df.drop_duplicates(subset='Datetime', keep='first')
+        print(f"  Removed duplicate timestamps (if any). Data length: {len(df)}")
+        
+        # Sort by Datetime to ensure proper resampling
+        df = df.sort_values('Datetime').reset_index(drop=True)
+        
         # Set Datetime as index for resampling
         df_indexed = df.set_index('Datetime')
         
