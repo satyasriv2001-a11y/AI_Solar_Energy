@@ -236,6 +236,28 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 print(f"\nTotal RMSE files created: {rmse_files_found}/{len(plant_folders)}")
                 print(f"Summary file location: {os.path.abspath(summary_file)}")
                 print(f"{'='*80}")
+                
+                # Final verification - list all RMSE files in the directory
+                print(f"\n{'='*80}")
+                print("FINAL VERIFICATION - Searching for RMSE files:")
+                print(f"{'='*80}")
+                import glob
+                all_rmse_files = glob.glob(os.path.join(predictions_dir, "**", "rmse*.csv"), recursive=True)
+                if all_rmse_files:
+                    print(f"Found {len(all_rmse_files)} RMSE file(s):")
+                    for f in sorted(all_rmse_files):
+                        print(f"  - {f}")
+                else:
+                    print("  [WARNING] No RMSE files found in directory tree!")
+                    print(f"  Searched in: {os.path.abspath(predictions_dir)}")
+                
+                # Also check summary file
+                summary_files = glob.glob(os.path.join(predictions_dir, "*rmse*.csv"))
+                if summary_files:
+                    print(f"\nSummary files found: {len(summary_files)}")
+                    for f in summary_files:
+                        print(f"  - {f}")
+                print(f"{'='*80}")
             else:
                 print(f"\n[ERROR] Summary file was not created: {summary_file}")
                 print(f"  Directory exists: {os.path.exists(predictions_dir)}")
