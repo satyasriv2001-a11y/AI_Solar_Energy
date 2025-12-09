@@ -163,12 +163,17 @@ def calculate_rmse_10am_6pm(predictions_dir):
             all_plant_results.append(result)
             
             # Save individual plant RMSE to CSV in plant folder
-            plant_rmse_df = pd.DataFrame([result])
-            plant_rmse_file = os.path.join(plant_folder, 'rmse_10am_6pm.csv')
-            plant_rmse_df.to_csv(plant_rmse_file, index=False)
-            print(f"  Saved: {plant_rmse_file}")
+            try:
+                plant_rmse_df = pd.DataFrame([result])
+                plant_rmse_file = os.path.join(plant_folder, 'rmse_10am_6pm.csv')
+                plant_rmse_df.to_csv(plant_rmse_file, index=False)
+                print(f"  Saved: {plant_rmse_file}")
+            except Exception as e:
+                print(f"  [ERROR] Failed to save RMSE file: {str(e)}")
         else:
             print(f"  [WARNING] No valid data points found for RMSE calculation")
+            print(f"  [DEBUG] Total files processed: {len(prediction_files)}")
+            print(f"  [DEBUG] Total data points collected: {len(all_data)}")
     
     # Create summary CSV with all plants' RMSE values
     if len(all_plant_results) > 0:
