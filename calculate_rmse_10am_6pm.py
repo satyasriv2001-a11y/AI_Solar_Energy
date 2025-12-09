@@ -228,14 +228,30 @@ def calculate_rmse_10am_6pm(predictions_dir):
             all_plant_results.append(result)
     
     # Create single CSV with all plants' RMSE values
+    summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm.csv')
+    
     if len(all_plant_results) > 0:
         try:
             summary_df = pd.DataFrame(all_plant_results)
-            summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm.csv')
+            print(f"\n{'='*80}")
+            print(f"Creating RMSE CSV file: {summary_file}")
+            print(f"{'='*80}")
+            print(f"Directory exists: {os.path.exists(predictions_dir)}")
+            print(f"Directory writable: {os.access(predictions_dir, os.W_OK)}")
+            print(f"Number of plant results: {len(all_plant_results)}")
+            
+            # Ensure directory exists
+            os.makedirs(predictions_dir, exist_ok=True)
+            
+            # Write CSV file
             summary_df.to_csv(summary_file, index=False)
+            print(f"CSV file written to: {os.path.abspath(summary_file)}")
             
             # Verify summary file was created
             if os.path.exists(summary_file):
+                file_size = os.path.getsize(summary_file)
+                print(f"File exists: True")
+                print(f"File size: {file_size} bytes")
                 print(f"\n{'='*80}")
                 print("[SUCCESS] RMSE Calculation Completed!")
                 print(f"{'='*80}")
@@ -266,16 +282,67 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 print(f"\n[ERROR] Summary file was not created: {summary_file}")
                 print(f"  Directory exists: {os.path.exists(predictions_dir)}")
                 print(f"  Directory writable: {os.access(predictions_dir, os.W_OK)}")
+                # Try to create an empty file to verify write permissions
+                try:
+                    test_file = os.path.join(predictions_dir, 'test_write.txt')
+                    with open(test_file, 'w') as f:
+                        f.write('test')
+                    os.remove(test_file)
+                    print(f"  Write permissions: OK")
+                except Exception as e:
+                    print(f"  Write permissions: FAILED - {str(e)}")
         except Exception as e:
             print(f"\n[ERROR] Failed to create summary file: {str(e)}")
             import traceback
             traceback.print_exc()
+            # Try to create at least an empty CSV with headers
+            try:
+                empty_df = pd.DataFrame(columns=['Plant_Name', 'RMSE_10AM_6PM', 'MAE_10AM_6PM', 'Number_of_Samples', 'Date', 'Time_Range'])
+                empty_df.to_csv(summary_file, index=False)
+                print(f"Created empty CSV file with headers: {summary_file}")
+            except Exception as e2:
+                print(f"Failed to create even empty CSV: {str(e2)}")
     else:
         print(f"\n[WARNING] No RMSE values calculated for any plants")
         print(f"  This could mean:")
         print(f"    - No prediction files found")
         print(f"    - No data on June 20 or 21, 2024 in 10 AM - 6 PM time range")
         print(f"    - Missing required columns in prediction files")
+        # Still create an empty CSV file
+        try:
+            empty_df = pd.DataFrame(columns=['Plant_Name', 'RMSE_10AM_6PM', 'MAE_10AM_6PM', 'Number_of_Samples', 'Date', 'Time_Range'])
+            empty_df.to_csv(summary_file, index=False)
+            print(f"\nCreated empty RMSE CSV file: {summary_file}")
+            print(f"File location: {os.path.abspath(summary_file)}")
+        except Exception as e:
+            print(f"\n[ERROR] Failed to create empty CSV file: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    # Final verification - always check if file exists
+    print(f"\n{'='*80}")
+    print("FINAL FILE VERIFICATION:")
+    print(f"{'='*80}")
+    if os.path.exists(summary_file):
+        file_size = os.path.getsize(summary_file)
+        print(f"✓ RMSE CSV file exists: {os.path.abspath(summary_file)}")
+        print(f"  File size: {file_size} bytes")
+        if file_size > 0:
+            # Try to read it back
+            try:
+                verify_df = pd.read_csv(summary_file)
+                print(f"  File contains {len(verify_df)} rows")
+                print(f"  Columns: {list(verify_df.columns)}")
+            except Exception as e:
+                print(f"  [WARNING] Could not read file back: {str(e)}")
+        else:
+            print(f"  [WARNING] File is empty (0 bytes)")
+    else:
+        print(f"✗ RMSE CSV file NOT FOUND: {summary_file}")
+        print(f"  Expected location: {os.path.abspath(summary_file)}")
+        print(f"  Directory exists: {os.path.exists(predictions_dir)}")
+        print(f"  Directory contents: {os.listdir(predictions_dir)[:10] if os.path.exists(predictions_dir) else 'N/A'}")
+    print(f"{'='*80}")
 
 
 def main():
