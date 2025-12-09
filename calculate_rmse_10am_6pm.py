@@ -31,7 +31,7 @@ def calculate_rmse_10am_6pm(predictions_dir):
         predictions_dir: Base directory containing plant prediction folders
     """
     print("=" * 80)
-    print("Calculating RMSE (June 20, 2024, 10 AM - 6 PM) for All Plants")
+    print("Calculating RMSE (June 20 or 21, 2024, 10 AM - 6 PM) for All Plants")
     print("=" * 80)
     print(f"Predictions directory: {os.path.abspath(predictions_dir)}")
     print(f"Directory exists: {os.path.exists(predictions_dir)}")
@@ -62,6 +62,49 @@ def calculate_rmse_10am_6pm(predictions_dir):
     print(f"\nFound {len(plant_folders)} plant folder(s):")
     for idx, folder in enumerate(plant_folders, 1):
         print(f"  [{idx}/{len(plant_folders)}] {os.path.basename(folder)}")
+    
+    # Determine which date (June 20 or 21, 2024) has all hours 10-18 for all plants
+    # Check first plant's files to determine the date
+    date_to_use = None
+    required_hours = set(range(10, 19))  # Hours 10-18 inclusive
+    
+    if len(plant_folders) > 0:
+        first_plant_files = glob.glob(os.path.join(plant_folders[0], "predictions_hour_*.csv"))
+        if len(first_plant_files) == 0:
+            first_plant_files = glob.glob(os.path.join(plant_folders[0], "*.csv"))
+        
+        if len(first_plant_files) > 0:
+            try:
+                sample_df = pd.read_csv(first_plant_files[0])
+                if 'Datetime' in sample_df.columns:
+                    sample_df['Datetime'] = pd.to_datetime(sample_df['Datetime'])
+                    june_2024 = sample_df[(sample_df['Datetime'].dt.year == 2024) & 
+                                         (sample_df['Datetime'].dt.month == 6) &
+                                         (sample_df['Datetime'].dt.day.isin([20, 21]))]
+                    
+                    for day in [20, 21]:
+                        day_data = june_2024[june_2024['Datetime'].dt.day == day]
+                        hours_present = set(day_data[day_data['Datetime'].dt.hour.between(10, 18)]['Datetime'].dt.hour.unique())
+                        if required_hours.issubset(hours_present):
+                            date_to_use = day
+                            print(f"\n[INFO] Using June {day}, 2024 (has all hours 10-18)")
+                            break
+                    
+                    if date_to_use is None:
+                        # Use whichever date has more hours
+                        for day in [20, 21]:
+                            day_data = june_2024[june_2024['Datetime'].dt.day == day]
+                            hours_present = set(day_data[day_data['Datetime'].dt.hour.between(10, 18)]['Datetime'].dt.hour.unique())
+                            if len(hours_present) >= len(required_hours):
+                                date_to_use = day
+                                print(f"\n[INFO] Using June {day}, 2024 (has {len(hours_present)} hours in range)")
+                                break
+            except Exception as e:
+                print(f"  [WARNING] Could not determine date automatically: {str(e)}")
+    
+    if date_to_use is None:
+        date_to_use = 20  # Default to June 20
+        print(f"\n[INFO] Defaulting to June {date_to_use}, 2024")
     
     # Store results for all plants
     all_plant_results = []
@@ -102,31 +145,27 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 
                 # Check required columns
                 if 'Datetime' not in df.columns:
-                    print(f"  [WARNING] {os.path.basename(pred_file)} missing 'Datetime' column. Columns: {list(df.columns)}")
                     continue
                 
                 if 'Predicted_Capacity_Factor' not in df.columns:
-                    print(f"  [WARNING] {os.path.basename(pred_file)} missing 'Predicted_Capacity_Factor' column. Columns: {list(df.columns)}")
                     continue
                 
                 if 'Ground_Truth_Capacity_Factor' not in df.columns:
-                    print(f"  [WARNING] {os.path.basename(pred_file)} missing 'Ground_Truth_Capacity_Factor' column. Columns: {list(df.columns)}")
                     continue
                 
                 # Convert Datetime column to datetime if it's not already
                 df['Datetime'] = pd.to_datetime(df['Datetime'])
                 
-                # Filter to June 20, 2024 (6-20-2024) between 10 AM - 6 PM (hours 10-18, inclusive)
+                # Filter to June 20 or 21, 2024 between 10 AM - 6 PM (hours 10-18, inclusive)
                 df_filtered = df[
                     (df['Datetime'].dt.year == 2024) &
                     (df['Datetime'].dt.month == 6) &
-                    (df['Datetime'].dt.day == 20) &
+                    (df['Datetime'].dt.day == date_to_use) &
                     (df['Datetime'].dt.hour >= 10) & 
                     (df['Datetime'].dt.hour <= 18)
                 ].copy()
                 
                 if len(df_filtered) == 0:
-                    print(f"  [DEBUG] {os.path.basename(pred_file)}: No data on June 20, 2024 between 10 AM - 6 PM")
                     continue
                 
                 # Get predicted and ground truth values
@@ -141,9 +180,9 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 
             except Exception as e:
                 print(f"  [ERROR] Error reading {os.path.basename(pred_file)}: {str(e)}")
-                import traceback
-                traceback.print_exc()
                 continue
+        
+        print(f"  [DEBUG] Total valid data points: {len(all_data)}")
         
         # Calculate RMSE if we have valid data
         if len(all_data) > 0:
@@ -159,46 +198,40 @@ def calculate_rmse_10am_6pm(predictions_dir):
             mae = np.mean(np.abs(preds_array - gt_array))
             n_samples = len(preds_array)
             
-            print(f"  RMSE (June 20, 2024, 10 AM - 6 PM): {rmse:.4f}")
-            print(f"  MAE (June 20, 2024, 10 AM - 6 PM): {mae:.4f}")
+            date_str = f"June {date_to_use}, 2024"
+            print(f"  RMSE ({date_str}, 10 AM - 6 PM): {rmse:.4f}")
+            print(f"  MAE ({date_str}, 10 AM - 6 PM): {mae:.4f}")
             print(f"  Number of samples: {n_samples}")
             
-            # Store results
+            # Store results (will be saved to single CSV at the end)
             result = {
                 'Plant_Name': plant_name,
-                'RMSE_June20_2024_10AM_6PM': rmse,
-                'MAE_June20_2024_10AM_6PM': mae,
+                'RMSE_10AM_6PM': rmse,
+                'MAE_10AM_6PM': mae,
                 'Number_of_Samples': n_samples,
-                'Date': 'June 20, 2024',
+                'Date': date_str,
                 'Time_Range': '10:00 - 18:00'
             }
             all_plant_results.append(result)
-            
-            # Save individual plant RMSE to CSV in plant folder
-            try:
-                plant_rmse_df = pd.DataFrame([result])
-                plant_rmse_file = os.path.join(plant_folder, 'rmse_june20_10am_6pm.csv')
-                plant_rmse_df.to_csv(plant_rmse_file, index=False)
-                print(f"  Saved: {plant_rmse_file}")
-                # Verify file was created
-                if os.path.exists(plant_rmse_file):
-                    print(f"  [VERIFIED] File exists: {os.path.abspath(plant_rmse_file)}")
-                else:
-                    print(f"  [ERROR] File was not created: {plant_rmse_file}")
-            except Exception as e:
-                print(f"  [ERROR] Failed to save RMSE file: {str(e)}")
-                import traceback
-                traceback.print_exc()
         else:
             print(f"  [WARNING] No valid data points found for RMSE calculation")
-            print(f"  [DEBUG] Total files processed: {len(prediction_files)}")
-            print(f"  [DEBUG] Total data points collected: {len(all_data)}")
+            date_str = f"June {date_to_use}, 2024"
+            result = {
+                'Plant_Name': plant_name,
+                'RMSE_10AM_6PM': np.nan,
+                'MAE_10AM_6PM': np.nan,
+                'Number_of_Samples': 0,
+                'Date': date_str,
+                'Time_Range': '10:00 - 18:00',
+                'Status': 'No data found'
+            }
+            all_plant_results.append(result)
     
-    # Create summary CSV with all plants' RMSE values
+    # Create single CSV with all plants' RMSE values
     if len(all_plant_results) > 0:
         try:
             summary_df = pd.DataFrame(all_plant_results)
-            summary_file = os.path.join(predictions_dir, 'rmse_june20_10am_6pm_summary.csv')
+            summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm.csv')
             summary_df.to_csv(summary_file, index=False)
             
             # Verify summary file was created
@@ -208,9 +241,14 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 print(f"{'='*80}")
                 print(f"\nSummary:")
                 print(f"  Total plants processed: {len(all_plant_results)}")
-                print(f"  Average RMSE (June 20, 2024, 10 AM - 6 PM): {summary_df['RMSE_June20_2024_10AM_6PM'].mean():.4f}")
-                print(f"  Min RMSE: {summary_df['RMSE_June20_2024_10AM_6PM'].min():.4f} ({summary_df.loc[summary_df['RMSE_June20_2024_10AM_6PM'].idxmin(), 'Plant_Name']})")
-                print(f"  Max RMSE: {summary_df['RMSE_June20_2024_10AM_6PM'].max():.4f} ({summary_df.loc[summary_df['RMSE_June20_2024_10AM_6PM'].idxmax(), 'Plant_Name']})")
+                # Filter out NaN values for statistics
+                valid_rmse = summary_df['RMSE_10AM_6PM'].dropna()
+                if len(valid_rmse) > 0:
+                    print(f"  Average RMSE (10 AM - 6 PM): {valid_rmse.mean():.4f}")
+                    print(f"  Min RMSE: {valid_rmse.min():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmin(), 'Plant_Name']})")
+                    print(f"  Max RMSE: {valid_rmse.max():.4f} ({summary_df.loc[summary_df['RMSE_10AM_6PM'].idxmax(), 'Plant_Name']})")
+                else:
+                    print(f"  [WARNING] No valid RMSE values to calculate statistics")
                 print(f"\nSummary file saved: {os.path.abspath(summary_file)}")
                 print(f"[VERIFIED] Summary file exists: {os.path.exists(summary_file)}")
                 print(f"{'='*80}")
@@ -219,44 +257,10 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 print("\nRMSE Summary Table:")
                 print(summary_df.to_string(index=False))
                 
-                # List all RMSE files created
                 print(f"\n{'='*80}")
-                print("RMSE Files Created:")
-                print(f"{'='*80}")
-                rmse_files_found = 0
-                for plant_folder in plant_folders:
-                    rmse_file = os.path.join(plant_folder, 'rmse_june20_10am_6pm.csv')
-                    if os.path.exists(rmse_file):
-                        print(f"  ✓ {os.path.basename(plant_folder)}/rmse_june20_10am_6pm.csv")
-                        print(f"     Full path: {os.path.abspath(rmse_file)}")
-                        rmse_files_found += 1
-                    else:
-                        print(f"  ✗ {os.path.basename(plant_folder)}/rmse_june20_10am_6pm.csv (NOT FOUND)")
-                
-                print(f"\nTotal RMSE files created: {rmse_files_found}/{len(plant_folders)}")
-                print(f"Summary file location: {os.path.abspath(summary_file)}")
-                print(f"{'='*80}")
-                
-                # Final verification - list all RMSE files in the directory
-                print(f"\n{'='*80}")
-                print("FINAL VERIFICATION - Searching for RMSE files:")
-                print(f"{'='*80}")
-                import glob
-                all_rmse_files = glob.glob(os.path.join(predictions_dir, "**", "rmse*.csv"), recursive=True)
-                if all_rmse_files:
-                    print(f"Found {len(all_rmse_files)} RMSE file(s):")
-                    for f in sorted(all_rmse_files):
-                        print(f"  - {f}")
-                else:
-                    print("  [WARNING] No RMSE files found in directory tree!")
-                    print(f"  Searched in: {os.path.abspath(predictions_dir)}")
-                
-                # Also check summary file
-                summary_files = glob.glob(os.path.join(predictions_dir, "*rmse*.csv"))
-                if summary_files:
-                    print(f"\nSummary files found: {len(summary_files)}")
-                    for f in summary_files:
-                        print(f"  - {f}")
+                print(f"RMSE CSV file created: {os.path.abspath(summary_file)}")
+                print(f"Total plants: {len(summary_df)}")
+                print(f"Plants with valid RMSE: {len(valid_rmse) if len(valid_rmse) > 0 else 0}")
                 print(f"{'='*80}")
             else:
                 print(f"\n[ERROR] Summary file was not created: {summary_file}")
@@ -270,7 +274,7 @@ def calculate_rmse_10am_6pm(predictions_dir):
         print(f"\n[WARNING] No RMSE values calculated for any plants")
         print(f"  This could mean:")
         print(f"    - No prediction files found")
-        print(f"    - No data on June 20, 2024 in 10 AM - 6 PM time range")
+        print(f"    - No data on June 20 or 21, 2024 in 10 AM - 6 PM time range")
         print(f"    - Missing required columns in prediction files")
 
 
