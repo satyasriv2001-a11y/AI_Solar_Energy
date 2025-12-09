@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Calculate RMSE between 10 AM and 6 PM for each plant's predictions.
+Calculate RMSE between 10 AM and 6 PM for June 20 or 21, 2024 for each plant's predictions.
 
 This script:
 1. Finds all prediction CSV files from hourly predictions
-2. Filters predictions to 10 AM - 6 PM hours only
-3. Calculates RMSE between predicted and ground truth for each plant
-4. Saves RMSE values to a CSV file in each plant's folder
+2. Determines which date (June 20 or 21, 2024) has complete data for hours 10-18
+3. Filters predictions to that date between 10 AM - 6 PM (hours 10-18) only
+4. Calculates RMSE between predicted and ground truth for each plant
+5. Saves all RMSE values to a single CSV file in the base predictions directory
 
 Usage:
     python calculate_rmse_10am_6pm.py --predictions-dir /path/to/predictions
@@ -25,7 +26,7 @@ from pathlib import Path
 
 def calculate_rmse_10am_6pm(predictions_dir):
     """
-    Calculate RMSE for June 20, 2024 (6-20-2024) between 10 AM and 6 PM for each plant.
+    Calculate RMSE for June 20 or 21, 2024 (whichever has complete data) between 10 AM and 6 PM for each plant.
     
     Args:
         predictions_dir: Base directory containing plant prediction folders
@@ -108,6 +109,10 @@ def calculate_rmse_10am_6pm(predictions_dir):
     
     # Store results for all plants
     all_plant_results = []
+    
+    # Define output file path early
+    summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm.csv')
+    print(f"\nOutput file will be: {os.path.abspath(summary_file)}")
     
     # Process each plant folder
     for plant_folder in plant_folders:
@@ -226,10 +231,25 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 'Status': 'No data found'
             }
             all_plant_results.append(result)
+            
+            # Save incrementally after each plant (append mode)
+            try:
+                if len(all_plant_results) == 1:
+                    # First plant - create new file with header
+                    df_temp = pd.DataFrame([result])
+                    df_temp.to_csv(summary_file, index=False)
+                    print(f"  [SAVED] Created RMSE file with first plant")
+                else:
+                    # Append to existing file
+                    existing_df = pd.read_csv(summary_file)
+                    new_df = pd.DataFrame([result])
+                    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                    combined_df.to_csv(summary_file, index=False)
+                    print(f"  [SAVED] Updated RMSE file (total: {len(all_plant_results)} plants)")
+            except Exception as e:
+                print(f"  [WARNING] Could not save incrementally: {str(e)}")
     
-    # Create single CSV with all plants' RMSE values
-    summary_file = os.path.join(predictions_dir, 'rmse_10am_6pm.csv')
-    
+    # Final save/update of CSV with all plants' RMSE values
     if len(all_plant_results) > 0:
         try:
             summary_df = pd.DataFrame(all_plant_results)
