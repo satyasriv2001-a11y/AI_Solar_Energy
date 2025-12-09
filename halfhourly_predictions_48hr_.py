@@ -199,31 +199,33 @@ def make_prediction_at_halfhour(model, config, df_clean, hist_feats, fcst_feats,
     future_hours = int(future_hours)
     
     # Get historical data (past_hours before hour_idx)
-    # For 30-minute data, we need to convert hours to indices
-    # Assuming data is at 30-minute intervals, past_hours * 2 gives us the number of 30-min intervals
-    # But if data is hourly, we just use past_hours directly
-    hist_start = max(0, hour_idx - past_hours)
+    # Data is now always 30-minute resolution after interpolation
+    # Convert hours to 30-minute intervals: past_hours * 2
+    past_halfhours = past_hours * 2
+    hist_start = max(0, hour_idx - past_halfhours)
     hist_end = hour_idx
     hist_data = df_clean.iloc[hist_start:hist_end].copy()
     
     # Get future data (24 hours starting from hour_idx)
+    # Convert hours to 30-minute intervals: future_hours * 2
+    future_halfhours = future_hours * 2
     fut_start = hour_idx
-    fut_end = min(len(df_clean), hour_idx + future_hours)
+    fut_end = min(len(df_clean), hour_idx + future_halfhours)
     fut_data = df_clean.iloc[fut_start:fut_end].copy()
     
     # Check if we have enough data
     hist_feats_list = list(hist_feats) if hist_feats else []
     n_hist_feats = len(hist_feats_list)
     
-    if len(hist_data) < past_hours and not no_hist_power:
+    if len(hist_data) < past_halfhours and not no_hist_power:
         # Pad with zeros if needed
         if len(hist_data) > 0 and n_hist_feats > 0:
-            padding = np.zeros((int(past_hours - len(hist_data)), n_hist_feats))
+            padding = np.zeros((int(past_halfhours - len(hist_data)), n_hist_feats))
             hist_array = np.vstack([padding, hist_data[hist_feats_list].values])
         else:
-            hist_array = np.zeros((int(past_hours), n_hist_feats))
+            hist_array = np.zeros((int(past_halfhours), n_hist_feats))
     elif no_hist_power:
-        hist_array = np.zeros((int(past_hours) if past_hours > 0 else 1, n_hist_feats))
+        hist_array = np.zeros((int(past_halfhours) if past_halfhours > 0 else 1, n_hist_feats))
     else:
         if n_hist_feats > 0:
             hist_array = hist_data[hist_feats_list].values
@@ -235,41 +237,45 @@ def make_prediction_at_halfhour(model, config, df_clean, hist_feats, fcst_feats,
     n_fcst_feats = len(fcst_feats_list)
     
     if fcst_feats_list and n_fcst_feats > 0:
-        if len(fut_data) < future_hours:
+        if len(fut_data) < future_halfhours:
             # Pad with last available values
             if len(fut_data) > 0:
                 last_row = fut_data[fcst_feats_list].iloc[-1:].values
             else:
                 last_row = np.zeros((1, n_fcst_feats))
-            padding = np.tile(last_row, (int(future_hours - len(fut_data)), 1))
+            padding = np.tile(last_row, (int(future_halfhours - len(fut_data)), 1))
             if len(fut_data) > 0:
                 fcst_array = np.vstack([fut_data[fcst_feats_list].values, padding])
             else:
                 fcst_array = padding
         else:
-            fcst_array = fut_data[fcst_feats_list].values[:int(future_hours)]
+            fcst_array = fut_data[fcst_feats_list].values[:int(future_halfhours)]
     else:
         fcst_array = None
     
     # Get ground truth
-    future_hours_int = int(future_hours)
-    if len(fut_data) < future_hours_int:
+    future_halfhours_int = int(future_halfhours)
+    if len(fut_data) < future_halfhours_int:
         # Pad with NaN if not enough data
-        gt = np.full(future_hours_int, np.nan)
+        gt = np.full(future_halfhours_int, np.nan)
         if len(fut_data) > 0:
             gt[:len(fut_data)] = fut_data['Capacity Factor'].values
     else:
-        gt = fut_data['Capacity Factor'].values[:future_hours_int]
+        gt = fut_data['Capacity Factor'].values[:future_halfhours_int]
     
     # Prepare input for model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Reshape for model input
-    past_hours_int = int(past_hours)
-    future_hours_int = int(future_hours)
-    X_hist = hist_array.reshape(1, past_hours_int if past_hours_int > 0 else 1, -1)
+    # After interpolation, data is 30-minute resolution
+    # The model was trained with past_halfhours and future_halfhours timesteps (since we passed those to create_sliding_windows)
+    # So we use the actual number of timesteps we have
+    past_timesteps = hist_array.shape[0] if len(hist_array.shape) > 0 else past_halfhours
+    future_timesteps = fcst_array.shape[0] if fcst_array is not None and len(fcst_array.shape) > 0 else future_halfhours
+    
+    X_hist = hist_array.reshape(1, past_timesteps, -1)
     if fcst_array is not None:
-        X_fcst = fcst_array.reshape(1, future_hours_int, -1)
+        X_fcst = fcst_array.reshape(1, future_timesteps, -1)
     else:
         X_fcst = None
     
@@ -311,9 +317,9 @@ def make_prediction_at_halfhour(model, config, df_clean, hist_feats, fcst_feats,
     # Clip predictions to reasonable range [0, 100]
     preds_inv = np.clip(preds_inv, 0, 100)
     
-    # Create future datetimes (24 hours, hourly intervals)
-    future_hours_int = int(future_hours)
-    future_datetimes = pd.date_range(start=prediction_datetime, periods=future_hours_int, freq='H')
+    # Create future datetimes (24 hours = 48 half-hour intervals)
+    future_halfhours_int = int(future_halfhours)
+    future_datetimes = pd.date_range(start=prediction_datetime, periods=future_halfhours_int, freq='30T')
     
     return preds_inv, gt_inv, prediction_datetime, future_datetimes
 
@@ -551,18 +557,61 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
     else:
         df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
         print("  Detected hourly resolution data (no Minute column)")
-        print("  Note: Will make predictions every 30 minutes using hourly data points")
+        print("  Interpolating to 30-minute resolution...")
+        
+        # Set Datetime as index for resampling
+        df_indexed = df.set_index('Datetime')
+        
+        # Resample to 30-minute frequency and interpolate
+        # Forward fill first, then linear interpolation for numeric columns
+        df_resampled = df_indexed.resample('30T').asfreq()
+        
+        # Interpolate numeric columns
+        numeric_cols = df_resampled.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            df_resampled[col] = df_resampled[col].interpolate(method='linear', limit_direction='both')
+        
+        # Forward fill non-numeric columns (like Year, Month, Day, Hour)
+        non_numeric_cols = df_resampled.select_dtypes(exclude=[np.number]).columns
+        for col in non_numeric_cols:
+            if col not in ['Datetime']:
+                df_resampled[col] = df_resampled[col].ffill()
+        
+        # Reset index to get Datetime back as a column
+        df = df_resampled.reset_index()
+        
+        # Update Year, Month, Day, Hour, Minute columns from the new Datetime
+        df['Year'] = df['Datetime'].dt.year
+        df['Month'] = df['Datetime'].dt.month
+        df['Day'] = df['Datetime'].dt.day
+        df['Hour'] = df['Datetime'].dt.hour
+        df['Minute'] = df['Datetime'].dt.minute
+        
+        # Now treat as 30-minute data
+        has_minute_column = True
+        print(f"  Interpolated from {len(df_indexed)} hourly points to {len(df)} 30-minute points")
     
     print("\n[1/4] Preprocessing data...")
     df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
     
     # Create sliding windows for train/val/test split
     print("\n[2/4] Creating sliding windows and splitting data...")
+    # After interpolation, data is 30-minute resolution
+    # Convert hours to 30-minute intervals for sliding windows
     past_hours = int(config.get('past_hours', 24))
     future_hours = int(config.get('future_hours', 24))
+    past_halfhours = past_hours * 2  # 24 hours = 48 half-hour intervals
+    future_halfhours = future_hours * 2  # 24 hours = 48 half-hour intervals
+    
+    # Create sliding windows using 30-minute intervals
+    # Note: create_sliding_windows expects hours, but we'll pass halfhours and it will work with indices
+    # Actually, we need to modify the approach - create_sliding_windows uses hours to determine window size
+    # Since our data is now 30-minute, we need to pass the number of 30-minute intervals
+    # But the function signature expects hours... Let's pass halfhours as "hours" and it should work
+    # because it just uses the number to determine window size in terms of dataframe rows
     
     X_hist, X_fcst, y, hours, dates = create_sliding_windows(
-        df_clean, past_hours, future_hours, hist_feats, fcst_feats, no_hist_power
+        df_clean, past_halfhours, future_halfhours, hist_feats, fcst_feats, no_hist_power
     )
     
     total_samples = len(X_hist)
@@ -630,16 +679,13 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
         test_idx_list = list(test_idx)
     
     first_test_sample_idx = int(test_idx_list[0])
-    first_test_start_in_df = int(past_hours) + first_test_sample_idx
+    first_test_start_in_df = int(past_halfhours) + first_test_sample_idx
     
     first_test_datetime = df_clean.iloc[first_test_start_in_df]['Datetime']
     target_year = first_test_datetime.year
     
-    # Find June 20th at 00:00 in the dataframe
-    if has_minute_column:
-        target_date = pd.Timestamp(year=target_year, month=6, day=20, hour=0, minute=0)
-    else:
-        target_date = pd.Timestamp(year=target_year, month=6, day=20, hour=0, minute=0)
+    # Find June 20th at 00:00 in the dataframe (data is now always 30-minute after interpolation)
+    target_date = pd.Timestamp(year=target_year, month=6, day=20, hour=0, minute=0)
     
     start_idx = None
     for idx in range(len(df_clean)):
@@ -655,31 +701,22 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
         actual_start_date = df_clean.iloc[start_idx]['Datetime']
         print(f"  Starting predictions from: {actual_start_date.strftime('%Y-%m-%d %H:%M')}")
     
-    # Determine step size based on data resolution
-    # If data is 30-minute, step by 1 index. If hourly, step by 0.5 hours (but use same data point)
-    if has_minute_column:
-        # 30-minute data: each index is 30 minutes
-        step_size = 1
-    else:
-        # Hourly data: we'll use the same index for two consecutive 30-minute predictions
-        # This means we'll make predictions at indices: start_idx, start_idx, start_idx+1, start_idx+1, ...
-        step_size = 0.5
-    
+    # After interpolation, data is always 30-minute resolution
+    # Each index represents a 30-minute interval
     future_hours_int = int(future_hours)
+    # For 30-minute data, future_hours needs to be converted to 30-minute intervals
+    # 24 hours = 48 half-hour intervals
+    future_halfhours = future_hours_int * 2
+    
     test_halfhour_indices = []
     
     for i in range(test_halfhours):
-        if has_minute_column:
-            # 30-minute data: increment by 1 index per half-hour
-            halfhour_idx = int(start_idx + i)
-        else:
-            # Hourly data: use floor(i/2) to get the hour index
-            # This gives us: 0->0, 1->0, 2->1, 3->1, 4->2, 5->2, ...
-            hour_idx = int(start_idx + (i // 2))
-            halfhour_idx = hour_idx
+        # 30-minute data: increment by 1 index per half-hour
+        halfhour_idx = int(start_idx + i)
         
         # Make sure we have enough data after this index for prediction
-        if halfhour_idx >= 0 and halfhour_idx < len(df_clean) - future_hours_int:
+        # Need enough data for the lookback window and future predictions
+        if halfhour_idx >= 0 and halfhour_idx < len(df_clean) - future_halfhours:
             test_halfhour_indices.append(halfhour_idx)
         else:
             break
@@ -712,13 +749,8 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
                 'Ground_Truth_Capacity_Factor': gt
             })
             
-            # Format datetime for display
-            if has_minute_column:
-                timestamp_str = pred_datetime.strftime('%Y-%m-%d_%H%M')
-            else:
-                # For hourly data, add :00 or :30 based on halfhour_num
-                minute_str = '00' if (halfhour_num - 1) % 2 == 0 else '30'
-                timestamp_str = pred_datetime.strftime(f'%Y-%m-%d_%H{minute_str}')
+            # Format datetime for display (data is now always 30-minute after interpolation)
+            timestamp_str = pred_datetime.strftime('%Y-%m-%d_%H%M')
             
             sheet_name = f"HalfHour_{halfhour_num:03d}_{timestamp_str}"
             
@@ -826,35 +858,3 @@ Examples:
                        help='Disable saving plots')
     
     args = parser.parse_args()
-    
-    print("\n" + "=" * 80)
-    print("MODE: Half-hourly predictions (30-minute resolution)")
-    print(f"Algorithm: {args.model} {args.complexity} {args.scenario}")
-    print("=" * 80 + "\n")
-    
-    # Create config
-    config = create_config_from_args(
-        args.data_path, args.model, args.complexity, args.scenario,
-        args.lookback, args.use_time_encoding
-    )
-    
-    # Set output directory
-    if args.output_dir is None:
-        output_dir = os.path.join(script_dir, f"halfhourly_predictions_{args.model}_{args.scenario}")
-    else:
-        output_dir = args.output_dir
-    
-    # Run predictions
-    try:
-        run_halfhourly_predictions(
-            args.data_path, config, output_dir, args.test_halfhours,
-            credentials_path=args.credentials_path,
-            spreadsheet_name=args.spreadsheet_name,
-            save_plots=args.save_plots
-        )
-    except Exception as e:
-        print(f"\n[ERROR] Failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
