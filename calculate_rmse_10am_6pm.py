@@ -25,13 +25,13 @@ from pathlib import Path
 
 def calculate_rmse_10am_6pm(predictions_dir):
     """
-    Calculate RMSE for June 20th between 10 AM and 6 PM for each plant.
+    Calculate RMSE for June 20, 2024 (6-20-2024) between 10 AM and 6 PM for each plant.
     
     Args:
         predictions_dir: Base directory containing plant prediction folders
     """
     print("=" * 80)
-    print("Calculating RMSE (June 20, 10 AM - 6 PM) for All Plants")
+    print("Calculating RMSE (June 20, 2024, 10 AM - 6 PM) for All Plants")
     print("=" * 80)
     print(f"Predictions directory: {os.path.abspath(predictions_dir)}")
     print(f"Directory exists: {os.path.exists(predictions_dir)}")
@@ -116,8 +116,9 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 # Convert Datetime column to datetime if it's not already
                 df['Datetime'] = pd.to_datetime(df['Datetime'])
                 
-                # Filter to June 20th (6-20) between 10 AM - 6 PM (hours 10-18, inclusive)
+                # Filter to June 20, 2024 (6-20-2024) between 10 AM - 6 PM (hours 10-18, inclusive)
                 df_filtered = df[
+                    (df['Datetime'].dt.year == 2024) &
                     (df['Datetime'].dt.month == 6) &
                     (df['Datetime'].dt.day == 20) &
                     (df['Datetime'].dt.hour >= 10) & 
@@ -125,7 +126,7 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 ].copy()
                 
                 if len(df_filtered) == 0:
-                    print(f"  [DEBUG] {os.path.basename(pred_file)}: No data on June 20th between 10 AM - 6 PM")
+                    print(f"  [DEBUG] {os.path.basename(pred_file)}: No data on June 20, 2024 between 10 AM - 6 PM")
                     continue
                 
                 # Get predicted and ground truth values
@@ -158,17 +159,17 @@ def calculate_rmse_10am_6pm(predictions_dir):
             mae = np.mean(np.abs(preds_array - gt_array))
             n_samples = len(preds_array)
             
-            print(f"  RMSE (June 20, 10 AM - 6 PM): {rmse:.4f}")
-            print(f"  MAE (June 20, 10 AM - 6 PM): {mae:.4f}")
+            print(f"  RMSE (June 20, 2024, 10 AM - 6 PM): {rmse:.4f}")
+            print(f"  MAE (June 20, 2024, 10 AM - 6 PM): {mae:.4f}")
             print(f"  Number of samples: {n_samples}")
             
             # Store results
             result = {
                 'Plant_Name': plant_name,
-                'RMSE_June20_10AM_6PM': rmse,
-                'MAE_June20_10AM_6PM': mae,
+                'RMSE_June20_2024_10AM_6PM': rmse,
+                'MAE_June20_2024_10AM_6PM': mae,
                 'Number_of_Samples': n_samples,
-                'Date': 'June 20',
+                'Date': 'June 20, 2024',
                 'Time_Range': '10:00 - 18:00'
             }
             all_plant_results.append(result)
@@ -207,9 +208,9 @@ def calculate_rmse_10am_6pm(predictions_dir):
                 print(f"{'='*80}")
                 print(f"\nSummary:")
                 print(f"  Total plants processed: {len(all_plant_results)}")
-                print(f"  Average RMSE (June 20, 10 AM - 6 PM): {summary_df['RMSE_June20_10AM_6PM'].mean():.4f}")
-                print(f"  Min RMSE: {summary_df['RMSE_June20_10AM_6PM'].min():.4f} ({summary_df.loc[summary_df['RMSE_June20_10AM_6PM'].idxmin(), 'Plant_Name']})")
-                print(f"  Max RMSE: {summary_df['RMSE_June20_10AM_6PM'].max():.4f} ({summary_df.loc[summary_df['RMSE_June20_10AM_6PM'].idxmax(), 'Plant_Name']})")
+                print(f"  Average RMSE (June 20, 2024, 10 AM - 6 PM): {summary_df['RMSE_June20_2024_10AM_6PM'].mean():.4f}")
+                print(f"  Min RMSE: {summary_df['RMSE_June20_2024_10AM_6PM'].min():.4f} ({summary_df.loc[summary_df['RMSE_June20_2024_10AM_6PM'].idxmin(), 'Plant_Name']})")
+                print(f"  Max RMSE: {summary_df['RMSE_June20_2024_10AM_6PM'].max():.4f} ({summary_df.loc[summary_df['RMSE_June20_2024_10AM_6PM'].idxmax(), 'Plant_Name']})")
                 print(f"\nSummary file saved: {os.path.abspath(summary_file)}")
                 print(f"[VERIFIED] Summary file exists: {os.path.exists(summary_file)}")
                 print(f"{'='*80}")
@@ -247,13 +248,13 @@ def calculate_rmse_10am_6pm(predictions_dir):
         print(f"\n[WARNING] No RMSE values calculated for any plants")
         print(f"  This could mean:")
         print(f"    - No prediction files found")
-        print(f"    - No data on June 20th in 10 AM - 6 PM time range")
+        print(f"    - No data on June 20, 2024 in 10 AM - 6 PM time range")
         print(f"    - Missing required columns in prediction files")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Calculate RMSE for June 20th between 10 AM and 6 PM for each plant\'s predictions.',
+        description='Calculate RMSE for June 20, 2024 (6-20-2024) between 10 AM and 6 PM for each plant\'s predictions.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
