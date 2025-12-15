@@ -750,11 +750,28 @@ def run_halfhourly_predictions(data_path, config, output_dir, test_halfhours=48,
                 halfhour_idx, past_hours, future_hours
             )
             
-            # Create DataFrame for this half-hour's prediction
-            pred_df = pd.DataFrame({
+            # Interpolate ground truth to ensure smooth 30-minute resolution for plotting
+            # Create a DataFrame with the ground truth
+            gt_df = pd.DataFrame({
                 'Datetime': future_dt,
-                'Predicted_Capacity_Factor': preds,
                 'Ground_Truth_Capacity_Factor': gt
+            })
+            
+            # Set Datetime as index for interpolation
+            gt_df = gt_df.set_index('Datetime')
+            
+            # Interpolate the ground truth values to ensure smooth 30-minute resolution
+            # This ensures ground truth is smoothly interpolated even if original data had gaps
+            gt_df['Ground_Truth_Capacity_Factor'] = gt_df['Ground_Truth_Capacity_Factor'].interpolate(method='linear', limit_direction='both')
+            
+            # Reset index to get Datetime back as column
+            gt_df_interpolated = gt_df.reset_index()
+            
+            # Create DataFrame for this half-hour's prediction with interpolated ground truth
+            pred_df = pd.DataFrame({
+                'Datetime': gt_df_interpolated['Datetime'],
+                'Predicted_Capacity_Factor': preds[:len(gt_df_interpolated)],  # Match length
+                'Ground_Truth_Capacity_Factor': gt_df_interpolated['Ground_Truth_Capacity_Factor']
             })
             
             # Format datetime for display (data is now always 30-minute after interpolation)
