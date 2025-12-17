@@ -141,4 +141,44 @@ else:
     print("  - hourly_rmse_plot_hourly.png (hourly RMSE scatter plot for hourly resolution)")
     print("  - hourly_rmse_plot_30_minute.png (hourly RMSE scatter plot for 30-minute resolution)")
     print("  - hourly_rmse_plot_15_minute.png (hourly RMSE scatter plot for 15-minute resolution)")
+    
+    # 6. Calculate RMSE (June 20 or 21, 2024, 10 AM - 6 PM) for Project1140
+    print("\n" + "="*80)
+    print("Calculating RMSE (June 20 or 21, 2024, 10 AM - 6 PM) for Project1140")
+    print("="*80)
+    
+    # Check if RMSE script exists
+    rmse_script_path = 'calculate_rmse_10am_6pm.py'
+    print(f"Checking for RMSE script: {rmse_script_path}")
+    print(f"Script exists: {os.path.exists(rmse_script_path)}")
+    print(f"Current directory: {os.getcwd()}")
+    
+    if os.path.exists(rmse_script_path):
+        print(f"Running RMSE calculation on: {DRIVE_PATH}")
+        result_rmse = subprocess.run(
+            ['python', rmse_script_path, '--predictions-dir', DRIVE_PATH],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd()
+        )
+        
+        print(f"Return code: {result_rmse.returncode}")
+        
+        if result_rmse.returncode == 0:
+            print("\n--- RMSE Calculation Output ---")
+            print(result_rmse.stdout)
+            if result_rmse.stderr:
+                print("\n--- RMSE Calculation Warnings/Errors ---")
+                print(result_rmse.stderr)
+            print("\n[SUCCESS] RMSE calculation completed!")
+        else:
+            print("\n[ERROR] RMSE calculation failed!")
+            print("--- Standard Error ---")
+            print(result_rmse.stderr)
+            print("\n--- Standard Output ---")
+            print(result_rmse.stdout)
+    else:
+        print(f"[WARNING] {rmse_script_path} not found. Skipping RMSE calculation.")
+        print("Make sure the script is in the repository.")
+        print(f"Files in current directory: {[f for f in os.listdir('.') if f.endswith('.py')][:10]}")
 
