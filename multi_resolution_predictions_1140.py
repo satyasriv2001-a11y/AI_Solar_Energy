@@ -378,7 +378,7 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
     return output_paths
 
 
-def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolution_name):
+def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolution_name, y_axis_limits=None):
     """
     Create a connected scatter plot showing hourly RMSE values.
     
@@ -387,6 +387,7 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
         output_path: Path to save the plot
         model_name: Name of the model
         resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute")
+        y_axis_limits: Tuple (ymin, ymax) for y-axis limits. If None, auto-scales.
     """
     if len(hourly_rmse_data) == 0:
         print(f"  [WARNING] No hourly RMSE data to plot for {resolution_name}")
@@ -403,6 +404,10 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
     plt.plot(hours, rmse_values, marker='o', linewidth=2, markersize=8, 
              color='steelblue', markerfacecolor='lightblue', markeredgecolor='darkblue', 
              markeredgewidth=1.5, alpha=0.8)
+    
+    # Set y-axis limits if provided
+    if y_axis_limits is not None:
+        plt.ylim(y_axis_limits[0], y_axis_limits[1])
     
     # Format x-axis
     ax = plt.gca()
@@ -694,6 +699,7 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
     ]
     
     all_results = {}
+    all_hourly_rmse_data = []  # Collect all RMSE data to determine common y-axis scale
     
     for resolution_minutes, test_intervals, resolution_name in resolutions:
         print(f"\n{'='*80}")
@@ -711,23 +717,22 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                 model_name = config.get('experiment_name', 'Model')
                 overlay_paths = create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name, max_predictions_per_plot=12)
                 
-                # Create hourly RMSE plot
-                rmse_plot_path = os.path.join(output_dir, f"hourly_rmse_plot_{resolution_name.lower().replace('-', '_')}.png")
-                create_hourly_rmse_plot(hourly_rmse_data, rmse_plot_path, model_name, resolution_name)
-                
+                # Store RMSE data for later (we'll create plots after determining common y-axis scale)
+                # Store RMSE data for later (we'll create plots after determining common y-axis scale)
                 all_results[resolution_name] = {
                     'predictions': all_predictions,
-                    'hourly_rmse': hourly_rmse_data
+                    'hourly_rmse': hourly_rmse_data,
+                    'overlay_paths': overlay_paths
                 }
+                all_hourly_rmse_data.append((resolution_name, hourly_rmse_data))
                 
-                print(f"\n[SUCCESS] {resolution_name} resolution completed")
+                print(f"\n[SUCCESS] {resolution_name} resolution predictions completed")
                 if len(overlay_paths) == 1:
                     print(f"  Overlay plot: {overlay_paths[0]}")
                 else:
                     print(f"  Overlay plots ({len(overlay_paths)} parts):")
                     for path in overlay_paths:
                         print(f"    - {path}")
-                print(f"  Hourly RMSE plot: {rmse_plot_path}")
             else:
                 print(f"\n[WARNING] No predictions generated for {resolution_name} resolution")
         
@@ -736,6 +741,35 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             import traceback
             traceback.print_exc()
             continue
+    
+    # Calculate common y-axis limits for RMSE plots
+    all_rmse_values = []
+    for resolution_name, hourly_rmse_data in all_hourly_rmse_data:
+        if len(hourly_rmse_data) > 0:
+            rmse_vals = [item[1] for item in hourly_rmse_data]
+            all_rmse_values.extend(rmse_vals)
+    
+    if len(all_rmse_values) > 0:
+        y_min = min(all_rmse_values)
+        y_max = max(all_rmse_values)
+        # Add 5% padding
+        y_range = y_max - y_min
+        y_axis_limits = (max(0, y_min - 0.05 * y_range), y_max + 0.05 * y_range)
+        print(f"\n{'='*80}")
+        print("Creating hourly RMSE plots with common y-axis scale")
+        print(f"Y-axis range: {y_axis_limits[0]:.4f} to {y_axis_limits[1]:.4f}")
+        print(f"{'='*80}")
+    else:
+        y_axis_limits = None
+        print(f"\n[WARNING] No RMSE data found for any resolution")
+    
+    # Create RMSE plots with common y-axis scale
+    for resolution_name, hourly_rmse_data in all_hourly_rmse_data:
+        if len(hourly_rmse_data) > 0:
+            rmse_plot_path = os.path.join(output_dir, f"hourly_rmse_plot_{resolution_name.lower().replace('-', '_')}.png")
+            model_name = config.get('experiment_name', 'Model')
+            create_hourly_rmse_plot(hourly_rmse_data, rmse_plot_path, model_name, resolution_name, y_axis_limits=y_axis_limits)
+            print(f"  Hourly RMSE plot saved: {rmse_plot_path}")
     
     print(f"\n{'='*80}")
     print("[SUCCESS] Multi-Resolution Predictions Completed!")
