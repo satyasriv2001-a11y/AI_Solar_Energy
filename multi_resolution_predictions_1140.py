@@ -850,11 +850,20 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             (pred_df['Datetime'].dt.hour <= 18)
         ].copy()
         
+        # Remove duplicate datetimes - keep the first occurrence to avoid counting overlapping predictions multiple times
+        # This ensures each time point is only counted once in RMSE calculation
+        filtered_df = filtered_df.drop_duplicates(subset=['Datetime'], keep='first')
+        
         # Calculate RMSE and MAE
         valid_mask = ~(filtered_df['Predicted'].isna() | filtered_df['Ground_Truth'].isna())
         if valid_mask.sum() > 0:
             preds_valid = filtered_df.loc[valid_mask, 'Predicted'].values
             gt_valid = filtered_df.loc[valid_mask, 'Ground_Truth'].values
+            
+            # Debug: print statistics
+            print(f"    Debug - Predicted range: [{preds_valid.min():.2f}, {preds_valid.max():.2f}], mean: {preds_valid.mean():.2f}")
+            print(f"    Debug - Ground truth range: [{gt_valid.min():.2f}, {gt_valid.max():.2f}], mean: {gt_valid.mean():.2f}")
+            print(f"    Debug - Unique time points: {len(preds_valid)}")
             
             mse = np.mean((preds_valid - gt_valid) ** 2)
             rmse_10am_6pm = np.sqrt(mse)
