@@ -123,6 +123,7 @@ def run_single_experiment(config: Dict, df: pd.DataFrame) -> Dict:
         train_size = int(total_samples * train_ratio)
         val_size = int(total_samples * val_ratio)
         
+        # Ensure indices are used as integer slices
         train_idx = indices[:train_size]
         val_idx = indices[train_size:train_size + val_size]
         test_idx = indices[train_size + val_size:]

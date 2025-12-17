@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Run all 284 experiments for PV forecasting (DL + ML + Linear, with resume support)
+Run all 284 experiments for the first dataset (Project1140.csv) and create
+individual CSV files for each experiment with 48-hour test period predictions.
+
+Each file contains:
+- Datetime: Hourly timestamps for 48-hour period
+- Ground_Truth: Actual capacity factor values
+- Predicted: Model predicted capacity factor values
 """
 
 import pandas as pd
 import numpy as np
-import yaml
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -28,7 +33,7 @@ from train.train_ml import train_ml_model
 
 
 # =============================================================================
-# CONFIG GENERATION
+# CONFIG GENERATION (same as run_main_experiments.py)
 # =============================================================================
 def generate_all_configs():
     """
@@ -96,9 +101,6 @@ def generate_all_configs():
     return configs
 
 
-# =============================================================================
-# CONFIG CREATION
-# =============================================================================
 def create_config(data_path, model, complexity, lookback, feat_combo, use_te, is_nwp_only):
     config = {
         'data_path': data_path,
@@ -161,10 +163,10 @@ def create_config(data_path, model, complexity, lookback, feat_combo, use_te, is
     else:
         if complexity == 'low':
             config['model_params'] = {'n_estimators': 10, 'max_depth': 1, 'learning_rate': 0.2,
-                                      'random_state': 42, 'verbosity': -1}  # Low complexity (underfit baseline)
+                                      'random_state': 42, 'verbosity': -1}
         else:
             config['model_params'] = {'n_estimators': 30, 'max_depth': 3, 'learning_rate': 0.1,
-                                      'random_state': 42, 'verbosity': -1}  # High complexity (validated optimal)
+                                      'random_state': 42, 'verbosity': -1}
 
     te_suffix = 'TE' if use_te else 'noTE'
     config['experiment_name'] = f"{model}_{feat_name}_{te_suffix}" if model == 'Linear' else f"{model}_{complexity}_{feat_name}_{te_suffix}"
@@ -173,17 +175,105 @@ def create_config(data_path, model, complexity, lookback, feat_combo, use_te, is
 
 
 # =============================================================================
-# MAIN LOOP WITH RESUME
+# EXTRACT 48-HOUR PERIOD FROM TEST DATA
 # =============================================================================
-def run_all_experiments(output_dir=None):
+def extract_48hour_period(predictions_all, y_true_all, test_dates, df_clean, future_hours=24):
     """
-    Run all experiments with optional output directory
+    Extract a 48-hour period from test data and create datetime index.
+    
+    In sliding windows:
+    - Each sample at position i in df_clean predicts hours i to i+23
+    - test_dates[i] contains the LAST datetime of the prediction window (i+23)
+    - So the prediction starts at test_dates[i] - 23 hours
     
     Args:
-        output_dir: Directory to save results (default: current directory)
+        predictions_all: (n_samples, 24) - full predictions for all test samples
+        y_true_all: (n_samples, 24) - full ground truth for all test samples
+        test_dates: List of dates corresponding to test samples (last hour of prediction window)
+        df_clean: Cleaned dataframe with Datetime column
+        future_hours: Number of hours predicted per sample (default 24)
+    
+    Returns:
+        result_df: DataFrame with columns [Datetime, Ground_Truth, Predicted]
+    """
+    if len(test_dates) == 0:
+        raise ValueError("No test dates available")
+    
+    # Convert test_dates to datetime if needed
+    test_dates_dt = []
+    for d in test_dates:
+        if isinstance(d, str):
+            test_dates_dt.append(pd.to_datetime(d))
+        elif hasattr(d, 'to_pydatetime'):
+            test_dates_dt.append(d)
+        elif hasattr(d, 'strftime'):
+            test_dates_dt.append(pd.to_datetime(d))
+        else:
+            test_dates_dt.append(pd.to_datetime(str(d)))
+    
+    # The test_dates represent the LAST hour of each 24-hour prediction window
+    # So for the first test sample, the prediction starts at test_dates[0] - 23 hours
+    # We'll extract 48 hours starting from the first sample
+    
+    if len(predictions_all) < 2:
+        # If we only have one sample, use 24 hours
+        first_end_date = test_dates_dt[0]
+        start_datetime = first_end_date - pd.Timedelta(hours=future_hours-1)
+        hours_to_extract = min(future_hours, predictions_all.shape[1])
+        
+        # Extract from first sample
+        preds = predictions_all[0, :hours_to_extract]
+        gt = y_true_all[0, :hours_to_extract]
+    else:
+        # Use first 2 samples for 48 hours
+        # First sample: predictions from test_dates[0] - 23h to test_dates[0]
+        first_end_date = test_dates_dt[0]
+        first_start_date = first_end_date - pd.Timedelta(hours=future_hours-1)
+        
+        # Second sample: predictions from test_dates[1] - 23h to test_dates[1]
+        second_end_date = test_dates_dt[1]
+        second_start_date = second_end_date - pd.Timedelta(hours=future_hours-1)
+        
+        # Check if samples are consecutive (second should start right after first ends)
+        # If they overlap or have gaps, we'll use the first sample's start as reference
+        start_datetime = first_start_date
+        
+        # Extract first 24 hours from first sample
+        preds_1 = predictions_all[0, :future_hours]
+        gt_1 = y_true_all[0, :future_hours]
+        
+        # Extract next 24 hours from second sample
+        preds_2 = predictions_all[1, :future_hours]
+        gt_2 = y_true_all[1, :future_hours]
+        
+        # Concatenate
+        preds = np.concatenate([preds_1, preds_2])
+        gt = np.concatenate([gt_1, gt_2])
+        hours_to_extract = 48
+    
+    # Create hourly datetime sequence
+    datetimes = pd.date_range(start=start_datetime, periods=len(preds), freq='H')
+    
+    # Create DataFrame
+    result_df = pd.DataFrame({
+        'Datetime': datetimes,
+        'Ground_Truth': gt,
+        'Predicted': preds
+    })
+    
+    return result_df
+
+
+# =============================================================================
+# MAIN LOOP
+# =============================================================================
+def run_all_experiments_with_predictions(output_dir=None):
+    """
+    Run all experiments and save individual prediction files for 48-hour period
     """
     print("=" * 80)
-    print("PV Forecasting: Running 284 Experiments (with resume support)")
+    print("PV Forecasting: Running 284 Experiments (First Dataset Only)")
+    print("Creating 48-hour prediction files for each experiment")
     print("=" * 80)
 
     all_configs = generate_all_configs()
@@ -191,6 +281,11 @@ def run_all_experiments(output_dir=None):
 
     import torch
     data_path = os.path.join(script_dir, "data", "Project1140.csv")
+    
+    if not os.path.exists(data_path):
+        print(f"Error: Data file not found: {data_path}")
+        return
+    
     df = pd.read_csv(data_path)
     df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour']])
 
@@ -199,38 +294,21 @@ def run_all_experiments(output_dir=None):
 
     # Set output directory
     if output_dir is None:
-        output_dir = script_dir
+        output_dir = os.path.join(script_dir, "predictions_48h")
     else:
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(output_dir, "predictions_48h")
     
+    os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
-
-    # === check for existing result CSV ===
-    output_file = os.path.join(output_dir, "all_experiments_results.csv")
-    
-    if os.path.exists(output_file):
-        print(f"Found existing result file: {output_file}")
-        results_df = pd.read_csv(output_file)
-        done_experiments = set(results_df["experiment_name"].tolist())
-    else:
-        results_df = pd.DataFrame(columns=[
-            'experiment_name', 'model', 'complexity', 'feature_combo',
-            'lookback_hours', 'use_time_encoding', 'mae', 'rmse', 'r2',
-            'train_time_sec', 'test_samples', 'best_epoch', 'param_count',
-            'predicted_values', 'mean_predicted_value', 'experiment_datetime', 'test_period_start', 'test_period_end'
-        ])
-        results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        done_experiments = set()
-        print(f"Created new result file: {output_file}")
-
-    print(f"[OK] Already completed: {len(done_experiments)}")
-    print(f"[INFO] Remaining: {len(all_configs) - len(done_experiments)}")
 
     # === main loop ===
     for idx, config in enumerate(all_configs, 1):
         exp_name = config['experiment_name']
-        if exp_name in done_experiments:
-            print(f"[SKIP] {exp_name} already completed.")
+        
+        # Check if prediction file already exists
+        prediction_file = os.path.join(output_dir, f"{exp_name}_predictions_48h.csv")
+        if os.path.exists(prediction_file):
+            print(f"[{idx}/{len(all_configs)}] SKIP: {exp_name} (prediction file already exists)")
             continue
 
         print(f"\n{'='*80}")
@@ -241,9 +319,7 @@ def run_all_experiments(output_dir=None):
             start_time = time.time()
             df_clean, hist_feats, fcst_feats, scaler_hist, scaler_fcst, scaler_target, no_hist_power = preprocess_features(df, config)
 
-            # Use 24-hour sliding windows (one prediction per hour)
-            # Creates samples by sliding a 24-hour window across the time series
-            # Supports variable lookback (24h, 72h)
+            # Use 24-hour sliding windows
             past_hours = config.get('past_hours', 24)
             X_hist, X_fcst, y, hours, dates = create_sliding_windows(
                 df_clean, past_hours, config['future_hours'], hist_feats, fcst_feats, no_hist_power
@@ -252,7 +328,7 @@ def run_all_experiments(output_dir=None):
             total_samples = len(X_hist)
             indices = np.arange(total_samples)
             
-            # Random shuffle for robust evaluation (covers all seasons)
+            # Sequential split (no shuffle)
             if config.get('shuffle_split', True):
                 np.random.seed(config.get('random_seed', 42))
                 np.random.shuffle(indices)
@@ -283,7 +359,7 @@ def run_all_experiments(output_dir=None):
             test_data = (X_hist_test, X_fcst_test, y_test, test_hours, test_dates)
             scalers = (scaler_hist, scaler_fcst, scaler_target)
 
-            # choose training function
+            # Train model
             if config['model'] in ['LSTM', 'GRU', 'Transformer', 'TCN']:
                 model, metrics = train_dl_model(config, train_data, val_data, test_data, scalers)
             else:
@@ -291,113 +367,57 @@ def run_all_experiments(output_dir=None):
 
             training_time = time.time() - start_time
             
-            # Parse feature combination name (scenario) from config
-            # Scenario should only be: PV, PV+HW, PV+NWP, PV+NWP+, NWP, NWP+
-            use_pv = config.get('use_pv', False)
-            use_hist_weather = config.get('use_hist_weather', False)
-            use_forecast = config.get('use_forecast', False)
-            use_ideal_nwp = config.get('use_ideal_nwp', False)
-            
-            if use_pv and use_hist_weather:
-                feat_name_str = 'PV+HW'
-            elif use_pv and use_forecast and use_ideal_nwp:
-                feat_name_str = 'PV+NWP+'
-            elif use_pv and use_forecast:
-                feat_name_str = 'PV+NWP'
-            elif use_pv:
-                feat_name_str = 'PV'
-            elif use_forecast and use_ideal_nwp:
-                feat_name_str = 'NWP+'
-            elif use_forecast:
-                feat_name_str = 'NWP'
-            else:
-                feat_name_str = 'Unknown'
-
-            # Serialize predictions to comma-separated string for CSV storage
-            predictions = metrics.get('predictions', np.array([]))
-            if isinstance(predictions, np.ndarray):
-                predicted_values_str = ','.join([f'{val:.6f}' for val in predictions.flatten()])
-                # Calculate mean predicted value (representative value corresponding to RMSE)
-                mean_predicted_value = float(np.mean(predictions))
-            else:
-                predicted_values_str = ''
-                mean_predicted_value = np.nan
-            
-            # Get experiment run timestamp
-            experiment_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Extract test period date range from metrics
-            test_dates = metrics.get('dates', [])
-            test_period_start = ''
-            test_period_end = ''
-            if test_dates:
-                # Convert dates to strings and sort
-                test_dates_str = []
-                for d in test_dates:
-                    if isinstance(d, str):
-                        test_dates_str.append(d)
-                    elif hasattr(d, 'strftime'):
-                        test_dates_str.append(d.strftime('%Y-%m-%d'))
-                    else:
-                        test_dates_str.append(str(d))
-                
-                if test_dates_str:
-                    test_dates_sorted = sorted(test_dates_str)
-                    test_period_start = test_dates_sorted[0]
-                    test_period_end = test_dates_sorted[-1]
-            
-            result = {
-                'experiment_name': exp_name,
-                'model': config['model'],
-                'complexity': config.get('model_complexity', 'N/A'),
-                'feature_combo': feat_name_str,
-                'lookback_hours': config['past_hours'],
-                'use_time_encoding': config['use_time_encoding'],
-                'mae': metrics.get('mae', 0.0),
-                'rmse': metrics.get('rmse', 0.0),
-                'r2': metrics.get('r2', 0.0),
-                'train_time_sec': round(training_time, 2),
-                'test_samples': metrics.get('samples_count', 0),
-                'best_epoch': int(metrics.get('best_epoch', 0)) if not pd.isna(metrics.get('best_epoch', 0)) else 0,
-                'param_count': int(metrics.get('param_count', 0)),
-                'predicted_values': predicted_values_str,
-                'mean_predicted_value': mean_predicted_value,
-                'experiment_datetime': experiment_datetime,
-                'test_period_start': test_period_start,
-                'test_period_end': test_period_end
-            }
-
             print(f"  [OK] MAE: {metrics['mae']:.4f}, RMSE: {metrics['rmse']:.4f}")
-            pd.DataFrame([result]).to_csv(output_file, mode='a', header=False, index=False, encoding='utf-8-sig')
             
-            # Update done_experiments to prevent duplicates in same run
-            done_experiments.add(exp_name)
+            # Extract 48-hour period predictions
+            predictions_all = metrics.get('predictions_all', None)
+            y_true_all = metrics.get('y_true_all', None)
+            
+            if predictions_all is None or y_true_all is None:
+                print(f"  [WARNING] No predictions_all or y_true_all in metrics, using predictions/y_true")
+                predictions_all = metrics.get('predictions', None)
+                y_true_all = metrics.get('y_true', None)
+                
+                # Reshape if needed (1D to 2D)
+                if predictions_all is not None and len(predictions_all.shape) == 1:
+                    # Need to reshape - but we don't know the original shape
+                    # Try to infer from test data
+                    n_test = len(test_idx)
+                    future_hours = config.get('future_hours', 24)
+                    try:
+                        predictions_all = predictions_all.reshape(n_test, future_hours)
+                        y_true_all = y_true_all.reshape(n_test, future_hours)
+                    except:
+                        print(f"  [ERROR] Cannot reshape predictions, skipping file creation")
+                        continue
+            
+            # Extract 48-hour period
+            try:
+                future_hours = config.get('future_hours', 24)
+                prediction_df = extract_48hour_period(
+                    predictions_all, y_true_all, test_dates, df_clean, future_hours
+                )
+                
+                # Save to CSV
+                prediction_df.to_csv(prediction_file, index=False, encoding='utf-8-sig')
+                print(f"  [SAVED] Prediction file: {prediction_file}")
+                print(f"  [INFO] 48-hour period: {prediction_df['Datetime'].iloc[0]} to {prediction_df['Datetime'].iloc[-1]}")
+                
+            except Exception as e:
+                print(f"  [ERROR] Failed to extract 48-hour period: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
 
         except Exception as e:
             print(f"  [ERROR] {exp_name} failed: {str(e)}")
             import traceback
             traceback.print_exc()
-            pd.DataFrame([{
-                'experiment_name': exp_name,
-                'model': config['model'],
-                'complexity': config['model_complexity'],
-                'feature_combo': 'FAILED',
-                'lookback_hours': config['past_hours'],
-                'use_time_encoding': config['use_time_encoding'],
-                'mae': np.nan, 'rmse': np.nan, 'r2': np.nan,
-                'train_time_sec': 0, 'test_samples': 0,
-                'best_epoch': 0, 'param_count': 0,
-                'predicted_values': '',
-                'mean_predicted_value': np.nan,
-                'experiment_datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'test_period_start': '',
-                'test_period_end': ''
-            }]).to_csv(output_file, mode='a', header=False, index=False, encoding='utf-8-sig')
             continue
 
     print(f"\n{'='*80}")
-    print("[OK] All Experiments Completed or Skipped!")
-    print(f"Results saved to: {output_file}")
+    print("[OK] All Experiments Completed!")
+    print(f"Prediction files saved to: {output_dir}")
     print(f"{'='*80}")
 
 
@@ -407,13 +427,11 @@ def run_all_experiments(output_dir=None):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description='Run all 284 experiments for single plant')
+    parser = argparse.ArgumentParser(description='Run all 284 experiments for first dataset and create 48-hour prediction files')
     parser.add_argument('--output-dir', type=str, default=None,
-                       help='Directory to save results (default: current directory). '
-                            'For Colab/Drive (use quotes): "/content/drive/MyDrive/Solar PV electricity/results"')
+                       help='Directory to save prediction files (default: ./predictions_48h)')
     
     args = parser.parse_args()
     
-    success = run_all_experiments(output_dir=args.output_dir)
-    if not success:
-        sys.exit(1)
+    run_all_experiments_with_predictions(output_dir=args.output_dir)
+
