@@ -690,7 +690,7 @@ def run_predictions_at_resolution(data_path, config, output_dir, resolution_minu
         hourly_rmse_data = sorted(hourly_rmse_data, key=lambda x: x[0])
         print(f"  Calculated hourly RMSE for {len(hourly_rmse_data)} hours")
     
-    return all_predictions, hourly_rmse_data
+    return all_predictions, hourly_rmse_data, all_pred_data  # Also return all_pred_data for 10AM-6PM RMSE calculation
 
 
 # =============================================================================
@@ -718,7 +718,7 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
         print(f"{'='*80}")
         
         try:
-            all_predictions, hourly_rmse_data = run_predictions_at_resolution(
+            all_predictions, hourly_rmse_data, all_pred_data = run_predictions_at_resolution(
                 data_path, config, output_dir, resolution_minutes, test_intervals, plant_name
             )
             
@@ -729,11 +729,11 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                 overlay_paths = create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name, max_predictions_per_plot=12)
                 
                 # Store RMSE data for later (we'll create plots after determining common y-axis scale)
-                # Store RMSE data for later (we'll create plots after determining common y-axis scale)
                 all_results[resolution_name] = {
                     'predictions': all_predictions,
                     'hourly_rmse': hourly_rmse_data,
-                    'overlay_paths': overlay_paths
+                    'overlay_paths': overlay_paths,
+                    'all_pred_data': all_pred_data  # Store prediction data for 10AM-6PM RMSE
                 }
                 all_hourly_rmse_data.append((resolution_name, hourly_rmse_data))
                 
@@ -781,6 +781,116 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             model_name = config.get('experiment_name', 'Model')
             create_hourly_rmse_plot(hourly_rmse_data, rmse_plot_path, model_name, resolution_name, y_axis_limits=y_axis_limits)
             print(f"  Hourly RMSE plot saved: {rmse_plot_path}")
+    
+    # Calculate and save RMSE for 10 AM - 6 PM (June 20 or 21, 2024) for each resolution
+    print(f"\n{'='*80}")
+    print("Calculating RMSE for 10 AM - 6 PM (June 20 or 21, 2024) for each resolution")
+    print(f"{'='*80}")
+    
+    rmse_results = []
+    
+    for resolution_name, resolution_data in all_results.items():
+        all_pred_data = resolution_data.get('all_pred_data', [])
+        
+        if len(all_pred_data) == 0:
+            print(f"  [WARNING] No prediction data for {resolution_name}")
+            continue
+        
+        # Convert to DataFrame
+        pred_df = pd.DataFrame(all_pred_data, columns=['Datetime', 'Predicted', 'Ground_Truth'])
+        pred_df['Datetime'] = pd.to_datetime(pred_df['Datetime'])
+        
+        # Determine which date (June 20 or 21, 2024) has more complete data for 10 AM - 6 PM
+        dates_to_check = [
+            pd.Timestamp(year=2024, month=6, day=20, hour=10, minute=0),
+            pd.Timestamp(year=2024, month=6, day=21, hour=10, minute=0)
+        ]
+        
+        best_date = None
+        best_count = 0
+        
+        for check_date in dates_to_check:
+            date_start = check_date
+            date_end = check_date.replace(hour=18, minute=0)
+            
+            date_filtered = pred_df[
+                (pred_df['Datetime'] >= date_start) &
+                (pred_df['Datetime'] <= date_end) &
+                (pred_df['Datetime'].dt.hour >= 10) &
+                (pred_df['Datetime'].dt.hour <= 18)
+            ]
+            
+            valid_count = len(date_filtered[
+                ~(date_filtered['Predicted'].isna() | date_filtered['Ground_Truth'].isna())
+            ])
+            
+            if valid_count > best_count:
+                best_count = valid_count
+                best_date = check_date
+        
+        if best_date is None or best_count == 0:
+            print(f"  [WARNING] No valid data for 10 AM - 6 PM on June 20 or 21, 2024 for {resolution_name}")
+            rmse_results.append({
+                'Resolution': resolution_name,
+                'Date': 'N/A',
+                'RMSE_10AM_6PM': np.nan,
+                'MAE_10AM_6PM': np.nan,
+                'Number_of_Samples_10AM_6PM': 0
+            })
+            continue
+        
+        # Filter to best date, 10 AM - 6 PM
+        date_start = best_date
+        date_end = best_date.replace(hour=18, minute=0)
+        
+        filtered_df = pred_df[
+            (pred_df['Datetime'] >= date_start) &
+            (pred_df['Datetime'] <= date_end) &
+            (pred_df['Datetime'].dt.hour >= 10) &
+            (pred_df['Datetime'].dt.hour <= 18)
+        ].copy()
+        
+        # Calculate RMSE and MAE
+        valid_mask = ~(filtered_df['Predicted'].isna() | filtered_df['Ground_Truth'].isna())
+        if valid_mask.sum() > 0:
+            preds_valid = filtered_df.loc[valid_mask, 'Predicted'].values
+            gt_valid = filtered_df.loc[valid_mask, 'Ground_Truth'].values
+            
+            mse = np.mean((preds_valid - gt_valid) ** 2)
+            rmse_10am_6pm = np.sqrt(mse)
+            mae_10am_6pm = np.mean(np.abs(preds_valid - gt_valid))
+            n_samples = len(preds_valid)
+            
+            date_str = best_date.strftime('June %d, %Y')
+            print(f"  {resolution_name}: RMSE = {rmse_10am_6pm:.4f}, MAE = {mae_10am_6pm:.4f}, Samples = {n_samples} ({date_str})")
+            
+            rmse_results.append({
+                'Resolution': resolution_name,
+                'Date': date_str,
+                'RMSE_10AM_6PM': rmse_10am_6pm,
+                'MAE_10AM_6PM': mae_10am_6pm,
+                'Number_of_Samples_10AM_6PM': n_samples
+            })
+        else:
+            print(f"  [WARNING] No valid data points for {resolution_name}")
+            rmse_results.append({
+                'Resolution': resolution_name,
+                'Date': 'N/A',
+                'RMSE_10AM_6PM': np.nan,
+                'MAE_10AM_6PM': np.nan,
+                'Number_of_Samples_10AM_6PM': 0
+            })
+    
+    # Save RMSE results to CSV
+    if len(rmse_results) > 0:
+        rmse_df = pd.DataFrame(rmse_results)
+        rmse_csv_path = os.path.join(output_dir, 'rmse_10am_6pm_by_resolution.csv')
+        rmse_df.to_csv(rmse_csv_path, index=False)
+        print(f"\n  RMSE CSV saved: {rmse_csv_path}")
+        print(f"\n  RMSE Results Summary:")
+        print(rmse_df.to_string(index=False))
+    else:
+        print(f"\n  [WARNING] No RMSE results to save")
     
     print(f"\n{'='*80}")
     print("[SUCCESS] Multi-Resolution Predictions Completed!")
