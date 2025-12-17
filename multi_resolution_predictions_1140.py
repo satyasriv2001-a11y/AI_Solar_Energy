@@ -291,14 +291,7 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
     
     output_paths = []
     
-    # Collect all datetimes and ground truth once (shared across all plots)
-    all_datetimes = set()
-    for pred_df, _, _ in all_predictions:
-        all_datetimes.update(pred_df['Datetime'])
-    
-    all_datetimes = sorted(list(all_datetimes))
-    
-    # Collect ground truth
+    # Collect ground truth (shared across all plots)
     gt_dict = {}
     for pred_df, _, _ in all_predictions:
         if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
@@ -325,30 +318,48 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
         
         colors = plt.cm.tab20(np.linspace(0, 1, len(plot_predictions)))
         
+        # Collect datetimes for this specific plot only
+        plot_datetimes = set()
+        
         # Plot predictions for this chunk
         for idx, (pred_df, pred_num, pred_datetime) in enumerate(plot_predictions):
             plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
                     label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
                     linewidth=1.5, alpha=0.6, color=colors[idx])
+            plot_datetimes.update(pred_df['Datetime'])
         
-        # Plot ground truth (same for all plots)
+        # Plot ground truth, but only for the time range of this plot
         if gt_dict:
-            gt_datetimes = sorted(gt_dict.keys())
-            gt_values = [gt_dict[dt] for dt in gt_datetimes]
-            plt.plot(gt_datetimes, gt_values, 
-                    label='Ground Truth', linewidth=3, color='black', marker='o', 
-                    markersize=6, alpha=0.9, zorder=100)
+            # Filter ground truth to only show datetimes within this plot's range
+            plot_datetimes_sorted = sorted(list(plot_datetimes))
+            if plot_datetimes_sorted:
+                plot_x_min = min(plot_datetimes_sorted)
+                plot_x_max = max(plot_datetimes_sorted)
+                
+                # Filter ground truth to this range
+                filtered_gt_datetimes = []
+                filtered_gt_values = []
+                for dt in sorted(gt_dict.keys()):
+                    if plot_x_min <= dt <= plot_x_max:
+                        filtered_gt_datetimes.append(dt)
+                        filtered_gt_values.append(gt_dict[dt])
+                
+                if filtered_gt_datetimes:
+                    plt.plot(filtered_gt_datetimes, filtered_gt_values, 
+                            label='Ground Truth', linewidth=3, color='black', marker='o', 
+                            markersize=6, alpha=0.9, zorder=100)
         
-        # Set x-axis limits
-        if all_datetimes:
-            x_min = min(all_datetimes)
-            x_max = max(all_datetimes)
+        # Set x-axis limits based on this plot's data only
+        plot_datetimes_sorted = sorted(list(plot_datetimes))
+        if plot_datetimes_sorted:
+            x_min = min(plot_datetimes_sorted)
+            x_max = max(plot_datetimes_sorted)
             x_range = x_max - x_min
             plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
         
         # Format x-axis
         ax = plt.gca()
-        if all_datetimes:
+        if plot_datetimes_sorted:
             ax.xaxis.set_major_locator(HourLocator(interval=6))
             ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
             ax.xaxis.set_minor_locator(HourLocator(interval=1))
