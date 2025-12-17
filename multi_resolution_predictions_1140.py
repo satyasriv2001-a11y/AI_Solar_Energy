@@ -271,24 +271,34 @@ def make_prediction_at_time(model, config, df_clean, hist_feats, fcst_feats, sca
 # =============================================================================
 # PLOTTING FUNCTIONS
 # =============================================================================
-def create_overlay_plot(all_predictions, output_path, model_name, resolution_name):
-    """Create overlay plot for all predictions at a given resolution"""
-    plt.figure(figsize=(24, 10))
+def create_overlay_plot(all_predictions, output_path, model_name, resolution_name, max_predictions_per_plot=12):
+    """
+    Create overlay plots for all predictions at a given resolution.
+    If there are more than max_predictions_per_plot predictions, creates multiple plots.
     
+    Args:
+        all_predictions: List of (pred_df, pred_num, pred_datetime) tuples
+        output_path: Base path for output plots (will append _part1, _part2, etc. if needed)
+        model_name: Name of the model
+        resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute")
+        max_predictions_per_plot: Maximum number of predictions to show per plot (default: 12)
+    
+    Returns:
+        List of output file paths
+    """
+    num_predictions = len(all_predictions)
+    num_plots = (num_predictions + max_predictions_per_plot - 1) // max_predictions_per_plot  # Ceiling division
+    
+    output_paths = []
+    
+    # Collect all datetimes and ground truth once (shared across all plots)
     all_datetimes = set()
     for pred_df, _, _ in all_predictions:
         all_datetimes.update(pred_df['Datetime'])
     
     all_datetimes = sorted(list(all_datetimes))
     
-    colors = plt.cm.tab20(np.linspace(0, 1, len(all_predictions)))
-    
-    for idx, (pred_df, pred_num, pred_datetime) in enumerate(all_predictions):
-        plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
-                label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
-                linewidth=1.5, alpha=0.6, color=colors[idx])
-    
-    # Collect and plot ground truth
+    # Collect ground truth
     gt_dict = {}
     for pred_df, _, _ in all_predictions:
         if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
@@ -297,38 +307,75 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
                     if dt not in gt_dict or pd.isna(gt_dict[dt]):
                         gt_dict[dt] = gt_val
     
-    if gt_dict:
-        gt_datetimes = sorted(gt_dict.keys())
-        gt_values = [gt_dict[dt] for dt in gt_datetimes]
-        plt.plot(gt_datetimes, gt_values, 
-                label='Ground Truth', linewidth=3, color='black', marker='o', 
-                markersize=6, alpha=0.9, zorder=100)
+    # Create each plot
+    for plot_idx in range(num_plots):
+        start_idx = plot_idx * max_predictions_per_plot
+        end_idx = min(start_idx + max_predictions_per_plot, num_predictions)
+        plot_predictions = all_predictions[start_idx:end_idx]
+        
+        # Determine output path
+        if num_plots > 1:
+            base_path = os.path.splitext(output_path)[0]
+            ext = os.path.splitext(output_path)[1]
+            plot_output_path = f"{base_path}_part{plot_idx + 1}{ext}"
+        else:
+            plot_output_path = output_path
+        
+        plt.figure(figsize=(24, 10))
+        
+        colors = plt.cm.tab20(np.linspace(0, 1, len(plot_predictions)))
+        
+        # Plot predictions for this chunk
+        for idx, (pred_df, pred_num, pred_datetime) in enumerate(plot_predictions):
+            plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
+                    label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
+                    linewidth=1.5, alpha=0.6, color=colors[idx])
+        
+        # Plot ground truth (same for all plots)
+        if gt_dict:
+            gt_datetimes = sorted(gt_dict.keys())
+            gt_values = [gt_dict[dt] for dt in gt_datetimes]
+            plt.plot(gt_datetimes, gt_values, 
+                    label='Ground Truth', linewidth=3, color='black', marker='o', 
+                    markersize=6, alpha=0.9, zorder=100)
+        
+        # Set x-axis limits
+        if all_datetimes:
+            x_min = min(all_datetimes)
+            x_max = max(all_datetimes)
+            x_range = x_max - x_min
+            plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+        
+        # Format x-axis
+        ax = plt.gca()
+        if all_datetimes:
+            ax.xaxis.set_major_locator(HourLocator(interval=6))
+            ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+            ax.xaxis.set_minor_locator(HourLocator(interval=1))
+        
+        plt.xlabel('Datetime', fontsize=14, fontweight='bold')
+        plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+        
+        # Title indicates which part this is
+        if num_plots > 1:
+            title = f'All Predictions Overlay - {model_name} ({resolution_name}) - Part {plot_idx + 1}/{num_plots}\n'
+            title += f'Predictions {start_idx + 1}-{end_idx} of {num_predictions} (24-hour ahead forecasts)'
+        else:
+            title = f'All Predictions Overlay - {model_name} ({resolution_name})\n'
+            title += f'{num_predictions} prediction intervals (24-hour ahead forecasts)'
+        
+        plt.title(title, fontsize=16, fontweight='bold')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, ncol=1)
+        plt.grid(True, alpha=0.3, which='both')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        plt.savefig(plot_output_path, dpi=200, bbox_inches='tight')
+        plt.close()
+        print(f"  Overlay plot saved: {plot_output_path} (Predictions {start_idx + 1}-{end_idx})")
+        output_paths.append(plot_output_path)
     
-    if all_datetimes:
-        x_min = min(all_datetimes)
-        x_max = max(all_datetimes)
-        x_range = x_max - x_min
-        plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
-    
-    ax = plt.gca()
-    if all_datetimes:
-        ax.xaxis.set_major_locator(HourLocator(interval=6))
-        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
-        ax.xaxis.set_minor_locator(HourLocator(interval=1))
-    
-    plt.xlabel('Datetime', fontsize=14, fontweight='bold')
-    plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
-    plt.title(f'All Predictions Overlay - {model_name} ({resolution_name})\n'
-              f'{len(all_predictions)} prediction intervals (24-hour ahead forecasts)', 
-              fontsize=16, fontweight='bold')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, ncol=1)
-    plt.grid(True, alpha=0.3, which='both')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    
-    plt.savefig(output_path, dpi=200, bbox_inches='tight')
-    plt.close()
-    print(f"  Overlay plot saved: {output_path}")
+    return output_paths
 
 
 def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolution_name):
@@ -659,10 +706,10 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             )
             
             if len(all_predictions) > 0:
-                # Create overlay plot
+                # Create overlay plot(s) - may create multiple if more than 12 predictions
                 overlay_path = os.path.join(output_dir, f"overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
                 model_name = config.get('experiment_name', 'Model')
-                create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name)
+                overlay_paths = create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name, max_predictions_per_plot=12)
                 
                 # Create hourly RMSE plot
                 rmse_plot_path = os.path.join(output_dir, f"hourly_rmse_plot_{resolution_name.lower().replace('-', '_')}.png")
@@ -674,7 +721,12 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                 }
                 
                 print(f"\n[SUCCESS] {resolution_name} resolution completed")
-                print(f"  Overlay plot: {overlay_path}")
+                if len(overlay_paths) == 1:
+                    print(f"  Overlay plot: {overlay_paths[0]}")
+                else:
+                    print(f"  Overlay plots ({len(overlay_paths)} parts):")
+                    for path in overlay_paths:
+                        print(f"    - {path}")
                 print(f"  Hourly RMSE plot: {rmse_plot_path}")
             else:
                 print(f"\n[WARNING] No predictions generated for {resolution_name} resolution")
