@@ -860,14 +860,19 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             preds_valid = filtered_df.loc[valid_mask, 'Predicted'].values
             gt_valid = filtered_df.loc[valid_mask, 'Ground_Truth'].values
             
-            # Debug: print statistics
-            print(f"    Debug - Predicted range: [{preds_valid.min():.2f}, {preds_valid.max():.2f}], mean: {preds_valid.mean():.2f}")
-            print(f"    Debug - Ground truth range: [{gt_valid.min():.2f}, {gt_valid.max():.2f}], mean: {gt_valid.mean():.2f}")
-            print(f"    Debug - Unique time points: {len(preds_valid)}")
+            # Convert from percentage (0-100) to absolute decimal (0-1) scale
+            preds_valid_abs = preds_valid / 100.0
+            gt_valid_abs = gt_valid / 100.0
             
-            mse = np.mean((preds_valid - gt_valid) ** 2)
+            # Debug: print statistics (in decimal scale)
+            print(f"    Debug - Predicted range: [{preds_valid_abs.min():.4f}, {preds_valid_abs.max():.4f}], mean: {preds_valid_abs.mean():.4f}")
+            print(f"    Debug - Ground truth range: [{gt_valid_abs.min():.4f}, {gt_valid_abs.max():.4f}], mean: {gt_valid_abs.mean():.4f}")
+            print(f"    Debug - Unique time points: {len(preds_valid_abs)}")
+            
+            # Calculate RMSE and MAE in absolute decimal scale (0-1)
+            mse = np.mean((preds_valid_abs - gt_valid_abs) ** 2)
             rmse_10am_6pm = np.sqrt(mse)
-            mae_10am_6pm = np.mean(np.abs(preds_valid - gt_valid))
+            mae_10am_6pm = np.mean(np.abs(preds_valid_abs - gt_valid_abs))
             n_samples = len(preds_valid)
             
             date_str = best_date.strftime('June %d, %Y')
