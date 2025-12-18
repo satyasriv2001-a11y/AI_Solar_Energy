@@ -344,8 +344,8 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
             ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
             ax.xaxis.set_minor_locator(HourLocator(interval=1))
         
-        plt.xlabel('Datetime', fontsize=14, fontweight='bold')
-        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=14, fontweight='bold')
+        plt.xlabel('Datetime', fontsize=42, fontweight='bold')
+        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=42, fontweight='bold')
         
         # Title indicates which part this is
         if num_plots > 1:
@@ -355,8 +355,9 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
             title = f'Prediction Error Overlay - {model_name} ({resolution_name})\n'
             title += f'{num_predictions} prediction intervals (24-hour ahead forecasts)'
         
-        plt.title(title, fontsize=16, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, ncol=1)
+        plt.title(title, fontsize=48, fontweight='bold')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=27, ncol=1)
+        ax.tick_params(labelsize=30)
         plt.grid(True, alpha=0.3, which='both')
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
@@ -420,12 +421,13 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
         ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
         ax.xaxis.set_minor_locator(HourLocator(interval=1))
     
-    plt.xlabel('Datetime', fontsize=14, fontweight='bold')
-    plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+    plt.xlabel('Datetime', fontsize=42, fontweight='bold')
+    plt.ylabel('Capacity Factor (%)', fontsize=42, fontweight='bold')
     plt.title(f'Ground Truth - {model_name} ({resolution_name})\n'
               f'Actual capacity factor values across all prediction intervals', 
-              fontsize=16, fontweight='bold')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)
+              fontsize=48, fontweight='bold')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=36)
+    ax.tick_params(labelsize=30)
     plt.grid(True, alpha=0.3, which='both')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
@@ -474,11 +476,12 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
     ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
     ax.xaxis.set_minor_locator(HourLocator(interval=1))
     
-    plt.xlabel('Hour', fontsize=14, fontweight='bold')
-    plt.ylabel('RMSE', fontsize=14, fontweight='bold')
+    plt.xlabel('Hour', fontsize=42, fontweight='bold')
+    plt.ylabel('RMSE', fontsize=42, fontweight='bold')
     plt.title(f'Hourly RMSE Values - {model_name} ({resolution_name})\n'
               f'RMSE calculated for each hour across all predictions', 
-              fontsize=16, fontweight='bold')
+              fontsize=48, fontweight='bold')
+    ax.tick_params(labelsize=30)
     plt.grid(True, alpha=0.3, which='both')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
