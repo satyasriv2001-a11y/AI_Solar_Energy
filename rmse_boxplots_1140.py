@@ -245,7 +245,8 @@ def run_predictions_and_calculate_error(data_path, config, resolution_minutes, t
     
     print(f"  Making predictions for {len(test_time_indices)} intervals...")
     
-    rmse_by_datetime = []
+    error_by_datetime = []
+    all_predictions = []  # Store prediction data for overlay plots
     
     for pred_num, time_idx in enumerate(test_time_indices, 1):
         try:
@@ -259,7 +260,15 @@ def run_predictions_and_calculate_error(data_path, config, resolution_minutes, t
             avg_error = calculate_average_error_for_prediction(preds, gt)
             
             if not np.isnan(avg_error):
-                rmse_by_datetime.append((pred_datetime, avg_error))
+                error_by_datetime.append((pred_datetime, avg_error))
+            
+            # Store prediction data for overlay plots
+            pred_df = pd.DataFrame({
+                'Datetime': future_dt,
+                'Predicted_Capacity_Factor': preds[:len(future_dt)],
+                'Ground_Truth_Capacity_Factor': gt[:len(future_dt)]
+            })
+            all_predictions.append((pred_df, pred_num, pred_datetime))
             
             if pred_num % 10 == 0 or pred_num == len(test_time_indices):
                 print(f"  [{pred_num}/{len(test_time_indices)}] Completed")
@@ -270,9 +279,97 @@ def run_predictions_and_calculate_error(data_path, config, resolution_minutes, t
             traceback.print_exc()
             continue
     
-    print(f"  Calculated average error for {len(rmse_by_datetime)} predictions")
+    print(f"  Calculated average error for {len(error_by_datetime)} predictions")
     
-    return rmse_by_datetime, resolution_name
+    return error_by_datetime, resolution_name, all_predictions
+
+
+def create_overlay_plot_error(all_predictions, output_path, model_name, resolution_name, max_predictions_per_plot=12):
+    """
+    Create overlay plots showing (prediction - actual) differences.
+    Similar to multi_resolution_predictions_1140.py but with large fonts.
+    
+    Args:
+        all_predictions: List of (pred_df, pred_num, pred_datetime) tuples
+        output_path: Base path for output plots
+        model_name: Name of the model
+        resolution_name: Resolution name (e.g., "Hourly", "10-minute")
+        max_predictions_per_plot: Maximum number of predictions to show per plot (default: 12)
+    
+    Returns:
+        List of output file paths
+    """
+    num_predictions = len(all_predictions)
+    num_plots = (num_predictions + max_predictions_per_plot - 1) // max_predictions_per_plot
+    
+    output_paths = []
+    
+    for plot_idx in range(num_plots):
+        start_idx = plot_idx * max_predictions_per_plot
+        end_idx = min(start_idx + max_predictions_per_plot, num_predictions)
+        plot_predictions = all_predictions[start_idx:end_idx]
+        
+        if num_plots > 1:
+            base_path = os.path.splitext(output_path)[0]
+            ext = os.path.splitext(output_path)[1]
+            plot_output_path = f"{base_path}_part{plot_idx + 1}{ext}"
+        else:
+            plot_output_path = output_path
+        
+        plt.figure(figsize=(24, 10))
+        plt.rcParams.update({'font.size': 27})
+        
+        colors = plt.cm.tab20(np.linspace(0, 1, len(plot_predictions)))
+        plot_datetimes = set()
+        
+        for idx, (pred_df, pred_num, pred_datetime) in enumerate(plot_predictions):
+            differences = pred_df['Predicted_Capacity_Factor'] - pred_df['Ground_Truth_Capacity_Factor']
+            valid_mask = ~(pred_df['Predicted_Capacity_Factor'].isna() | pred_df['Ground_Truth_Capacity_Factor'].isna())
+            valid_datetimes = pred_df.loc[valid_mask, 'Datetime']
+            valid_differences = differences.loc[valid_mask]
+            
+            plt.plot(valid_datetimes, valid_differences, 
+                    linewidth=3.0, alpha=0.85, color=colors[idx])
+            plot_datetimes.update(valid_datetimes)
+        
+        plt.axhline(y=0, color='black', linestyle='--', linewidth=2.5, alpha=0.8)
+        
+        plot_datetimes_sorted = sorted(list(plot_datetimes))
+        if plot_datetimes_sorted:
+            x_min = min(plot_datetimes_sorted)
+            x_max = max(plot_datetimes_sorted)
+            x_range = x_max - x_min
+            plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+        
+        ax = plt.gca()
+        if plot_datetimes_sorted:
+            ax.xaxis.set_major_locator(HourLocator(interval=6))
+            ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+            ax.xaxis.set_minor_locator(HourLocator(interval=1))
+        
+        plt.xlabel('Datetime', fontsize=33, fontweight='bold')
+        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=33, fontweight='bold')
+        
+        if num_plots > 1:
+            title = f'Prediction Error Overlay - {model_name} ({resolution_name}) - Part {plot_idx + 1}/{num_plots}\n'
+            title += f'Predictions {start_idx + 1}-{end_idx} of {num_predictions} (24-hour ahead forecasts)'
+        else:
+            title = f'Prediction Error Overlay - {model_name} ({resolution_name})\n'
+            title += f'{num_predictions} prediction intervals (24-hour ahead forecasts)'
+        
+        plt.title(title, fontsize=36, fontweight='bold')
+        plt.grid(True, alpha=0.3, which='both')
+        plt.xticks(rotation=45, ha='right', fontsize=24)
+        plt.yticks(fontsize=24)
+        plt.tight_layout()
+        
+        os.makedirs(os.path.dirname(plot_output_path) if os.path.dirname(plot_output_path) else '.', exist_ok=True)
+        plt.savefig(plot_output_path, dpi=200, bbox_inches='tight')
+        plt.close()
+        print(f"  Overlay plot saved: {plot_output_path} (Predictions {start_idx + 1}-{end_idx})")
+        output_paths.append(plot_output_path)
+    
+    return output_paths
 
 
 def create_error_boxplots(error_by_datetime_list, output_dir, model_name, resolution_name):
@@ -373,7 +470,7 @@ def run_error_boxplots(data_path, config, output_dir, resolutions=None):
         print(f"{'='*80}")
         
         try:
-            error_by_datetime, _ = run_predictions_and_calculate_error(
+            error_by_datetime, _, all_predictions = run_predictions_and_calculate_error(
                 data_path, config, resolution_minutes, test_intervals
             )
             
@@ -385,6 +482,13 @@ def run_error_boxplots(data_path, config, output_dir, resolutions=None):
                 create_error_boxplots(error_by_datetime, output_dir, 
                                      config.get('experiment_name', 'Model'), 
                                      resolution_name)
+                
+                # Create overlay plot (predicted - actual) for 10-minute resolution
+                if resolution_name == "10-minute" and len(all_predictions) > 0:
+                    overlay_path = os.path.join(output_dir, f"overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
+                    create_overlay_plot_error(all_predictions, overlay_path, 
+                                            config.get('experiment_name', 'Model'), 
+                                            resolution_name, max_predictions_per_plot=12)
                 
                 print(f"\n[SUCCESS] {resolution_name} resolution error box plots completed")
             else:

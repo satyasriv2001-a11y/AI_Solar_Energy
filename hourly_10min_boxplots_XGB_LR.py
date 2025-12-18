@@ -36,7 +36,7 @@ from train.train_ml import train_ml_model
 # Import config creation functions from multi_resolution_predictions_1140
 sys.path.insert(0, script_dir)
 from multi_resolution_predictions_1140 import create_config_from_args, make_prediction_at_time
-from rmse_boxplots_1140 import calculate_average_error_for_prediction, run_predictions_and_calculate_error, create_error_boxplots
+from rmse_boxplots_1140 import calculate_average_error_for_prediction, run_predictions_and_calculate_error, create_error_boxplots, create_overlay_plot_error
 
 
 def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use_time_encoding, output_base_dir):
@@ -80,6 +80,7 @@ def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use
     
     # Store error data for each resolution for summary table
     all_error_data = {}
+    all_predictions_data = {}  # Store prediction data for overlay plots
     
     for resolution_minutes, test_intervals, resolution_name in resolutions:
         print(f"\n{'='*80}")
@@ -87,18 +88,27 @@ def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use
         print(f"{'='*80}")
         
         try:
-            error_by_datetime, _ = run_predictions_and_calculate_error(
+            error_by_datetime, _, all_predictions = run_predictions_and_calculate_error(
                 data_path, config, resolution_minutes, test_intervals
             )
             
             if len(error_by_datetime) > 0:
                 # Store error data for summary table
                 all_error_data[resolution_name] = error_by_datetime
+                # Store prediction data for overlay plots
+                all_predictions_data[resolution_name] = all_predictions
                 
                 # Create box plots grouped by hour (0-23)
                 create_error_boxplots(error_by_datetime, output_dir, 
                                      config.get('experiment_name', 'Model'), 
                                      resolution_name)
+                
+                # Create overlay plot (predicted - actual) for 10-minute resolution
+                if resolution_name == "10-minute" and len(all_predictions) > 0:
+                    overlay_path = os.path.join(output_dir, f"overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
+                    create_overlay_plot_error(all_predictions, overlay_path, 
+                                            config.get('experiment_name', 'Model'), 
+                                            resolution_name, max_predictions_per_plot=12)
                 
                 print(f"\n[SUCCESS] {resolution_name} resolution error box plots completed")
             else:
