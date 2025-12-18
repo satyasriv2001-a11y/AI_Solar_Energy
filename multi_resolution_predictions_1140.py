@@ -492,7 +492,7 @@ def run_predictions_at_resolution(data_path, config, output_dir, resolution_minu
         
         numeric_cols = df_resampled.select_dtypes(include=[np.number]).columns
         for col in numeric_cols:
-            df_resampled[col] = df_resampled[col].interpolate(method='linear', limit_direction='both')
+            df_resampled[col] = df_resampled[col].interpolate(method='pchip', limit_direction='both')
         
         non_numeric_cols = df_resampled.select_dtypes(exclude=[np.number]).columns
         for col in non_numeric_cols:
@@ -643,7 +643,7 @@ def run_predictions_at_resolution(data_path, config, output_dir, resolution_minu
                 'Ground_Truth_Capacity_Factor': gt
             })
             gt_df = gt_df.set_index('Datetime')
-            gt_df['Ground_Truth_Capacity_Factor'] = gt_df['Ground_Truth_Capacity_Factor'].interpolate(method='linear', limit_direction='both')
+            gt_df['Ground_Truth_Capacity_Factor'] = gt_df['Ground_Truth_Capacity_Factor'].interpolate(method='pchip', limit_direction='both')
             gt_df_interpolated = gt_df.reset_index()
             
             pred_df = pd.DataFrame({
