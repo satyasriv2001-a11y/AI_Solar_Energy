@@ -43,10 +43,10 @@ drive.mount('/content/drive')
 
 !python batch_create_configs.py
 
-# 5. Run Hourly and 10-Minute RMSE Box Plots on Project1140 with XGB and LR
+# 5. Run Hourly and 10-Minute Error Box Plots on Project1140 with XGB and LR
 # This will process only Project1140.csv
 # Results save directly to Drive!
-# Generates box plots showing RMSE distribution by prediction start time
+# Generates box plots showing average error distribution by prediction start hour (0-23)
 # For both XGB and Linear Regression models at hourly and 10-minute resolutions
 
 import subprocess
@@ -69,10 +69,12 @@ if len(project1140_files) == 0:
     print(f"Available files: {[os.path.basename(f) for f in csv_files[:10]]}")
 else:
     print("=" * 80)
-    print("Running Hourly and 10-Minute RMSE Box Plots on Project1140")
+    print("Running Hourly and 10-Minute Error Box Plots on Project1140")
     print("=" * 80)
     print(f"Configuration: XGB and LR models, high complexity, PV+NWP, 24h lookback, NO time encoding")
     print(f"Resolutions: Hourly and 10-minute")
+    print(f"X-axis: Prediction start hour (0-23)")
+    print(f"Y-axis: Average error (percentage points)")
     print(f"Output directory: {DRIVE_PATH}")
     print("=" * 80)
     print(f"\nFound {len(project1140_files)} Project1140 file(s):")
@@ -132,19 +134,19 @@ else:
             print(result.stdout[-2000:])
     
     print(f"\n{'='*80}")
-    print("[SUCCESS] Hourly and 10-Minute RMSE Box Plot Generation Completed!")
+    print("[SUCCESS] Hourly and 10-Minute Error Box Plot Generation Completed!")
     print(f"Results saved to: {DRIVE_PATH}")
     print(f"{'='*80}")
     print("\nGenerated files:")
     print("  For XGB Model:")
-    print("    - rmse_boxplot_hourly_hour.png (Hourly resolution)")
-    print("    - rmse_boxplot_10_minute_hour.png (10-minute resolution)")
-    print("    - average_rmse_boxplot_XGB_by_resolution.csv (Summary table)")
+    print("    - error_boxplot_hourly_by_hour.png (Hourly resolution, hours 0-23)")
+    print("    - error_boxplot_10_minute_by_hour.png (10-minute resolution, hours 0-23)")
+    print("    - average_error_boxplot_XGB_by_resolution.csv (Summary table)")
     print("  For LR Model:")
-    print("    - rmse_boxplot_hourly_hour.png (Hourly resolution)")
-    print("    - rmse_boxplot_10_minute_hour.png (10-minute resolution)")
-    print("    - average_rmse_boxplot_LR_by_resolution.csv (Summary table)")
+    print("    - error_boxplot_hourly_by_hour.png (Hourly resolution, hours 0-23)")
+    print("    - error_boxplot_10_minute_by_hour.png (10-minute resolution, hours 0-23)")
+    print("    - average_error_boxplot_LR_by_resolution.csv (Summary table)")
     print("  Combined:")
-    print("    - average_rmse_boxplot_combined_XGB_LR.csv (Combined summary)")
-    print("\nNote: Each box plot shows RMSE distribution for 24-hour forecasts starting at each time interval")
+    print("    - average_error_boxplot_combined_XGB_LR.csv (Combined summary)")
+    print("\nNote: Each box plot shows average error distribution for 24-hour forecasts starting at each hour (0-23)")
 
