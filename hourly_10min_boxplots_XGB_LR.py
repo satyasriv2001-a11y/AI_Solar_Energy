@@ -36,7 +36,7 @@ from train.train_ml import train_ml_model
 # Import config creation functions from multi_resolution_predictions_1140
 sys.path.insert(0, script_dir)
 from multi_resolution_predictions_1140 import create_config_from_args, make_prediction_at_time
-from rmse_boxplots_1140 import calculate_rmse_for_prediction, run_predictions_and_calculate_rmse, create_rmse_boxplots
+from rmse_boxplots_1140 import calculate_average_error_for_prediction, run_predictions_and_calculate_error, create_error_boxplots
 
 
 def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use_time_encoding, output_base_dir):
@@ -78,8 +78,8 @@ def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use
         (10, 144, "10-minute")   # 10 minutes, 144 intervals (24 hours)
     ]
     
-    # Store RMSE data for each resolution for summary table
-    all_rmse_data = {}
+    # Store error data for each resolution for summary table
+    all_error_data = {}
     
     for resolution_minutes, test_intervals, resolution_name in resolutions:
         print(f"\n{'='*80}")
@@ -87,22 +87,22 @@ def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use
         print(f"{'='*80}")
         
         try:
-            rmse_by_datetime, _ = run_predictions_and_calculate_rmse(
+            error_by_datetime, _ = run_predictions_and_calculate_error(
                 data_path, config, resolution_minutes, test_intervals
             )
             
-            if len(rmse_by_datetime) > 0:
-                # Store RMSE data for summary table
-                all_rmse_data[resolution_name] = rmse_by_datetime
+            if len(error_by_datetime) > 0:
+                # Store error data for summary table
+                all_error_data[resolution_name] = error_by_datetime
                 
-                # Create box plots grouped by hour
-                create_rmse_boxplots(rmse_by_datetime, output_dir, 
-                                   config.get('experiment_name', 'Model'), 
-                                   resolution_name, group_by='hour')
+                # Create box plots grouped by hour (0-23)
+                create_error_boxplots(error_by_datetime, output_dir, 
+                                     config.get('experiment_name', 'Model'), 
+                                     resolution_name)
                 
-                print(f"\n[SUCCESS] {resolution_name} resolution RMSE box plots completed")
+                print(f"\n[SUCCESS] {resolution_name} resolution error box plots completed")
             else:
-                print(f"\n[WARNING] No RMSE data generated for {resolution_name} resolution")
+                print(f"\n[WARNING] No error data generated for {resolution_name} resolution")
         
         except Exception as e:
             print(f"\n[ERROR] Failed {resolution_name} resolution: {str(e)}")
@@ -115,42 +115,42 @@ def run_boxplots_for_model(data_path, model, complexity, scenario, lookback, use
     print(f"Creating Summary Table for {model.upper()} Model")
     print(f"{'='*80}")
     
-    rmse_summary = []
+    error_summary = []
     
-    for resolution_name, rmse_by_datetime in all_rmse_data.items():
-        if len(rmse_by_datetime) > 0:
-            # Extract RMSE values
-            rmse_values = [rmse for _, rmse in rmse_by_datetime]
-            rmse_values = [r for r in rmse_values if not np.isnan(r)]
+    for resolution_name, error_by_datetime in all_error_data.items():
+        if len(error_by_datetime) > 0:
+            # Extract error values
+            error_values = [err for _, err in error_by_datetime]
+            error_values = [e for e in error_values if not np.isnan(e)]
             
-            if len(rmse_values) > 0:
-                avg_rmse = np.mean(rmse_values)
-                median_rmse = np.median(rmse_values)
-                std_rmse = np.std(rmse_values)
-                min_rmse = np.min(rmse_values)
-                max_rmse = np.max(rmse_values)
-                n_predictions = len(rmse_values)
+            if len(error_values) > 0:
+                avg_error = np.mean(error_values)
+                median_error = np.median(error_values)
+                std_error = np.std(error_values)
+                min_error = np.min(error_values)
+                max_error = np.max(error_values)
+                n_predictions = len(error_values)
                 
-                rmse_summary.append({
+                error_summary.append({
                     'Resolution': resolution_name,
-                    'Average_RMSE': avg_rmse,
-                    'Median_RMSE': median_rmse,
-                    'Std_RMSE': std_rmse,
-                    'Min_RMSE': min_rmse,
-                    'Max_RMSE': max_rmse,
+                    'Average_Error_Percentage_Points': avg_error,
+                    'Median_Error_Percentage_Points': median_error,
+                    'Std_Error_Percentage_Points': std_error,
+                    'Min_Error_Percentage_Points': min_error,
+                    'Max_Error_Percentage_Points': max_error,
                     'Number_of_Predictions': n_predictions
                 })
     
     # Save and display summary table
-    if len(rmse_summary) > 0:
-        rmse_summary_df = pd.DataFrame(rmse_summary)
-        rmse_summary_csv_path = os.path.join(output_dir, f'average_rmse_boxplot_{model_suffix}_by_resolution.csv')
-        rmse_summary_df.to_csv(rmse_summary_csv_path, index=False)
-        print(f"\n  Average RMSE Summary saved: {rmse_summary_csv_path}")
-        print(f"\n  Average RMSE by Resolution ({model}):")
-        print(rmse_summary_df.to_string(index=False))
+    if len(error_summary) > 0:
+        error_summary_df = pd.DataFrame(error_summary)
+        error_summary_csv_path = os.path.join(output_dir, f'average_error_boxplot_{model_suffix}_by_resolution.csv')
+        error_summary_df.to_csv(error_summary_csv_path, index=False)
+        print(f"\n  Average Error Summary saved: {error_summary_csv_path}")
+        print(f"\n  Average Error by Resolution ({model}):")
+        print(error_summary_df.to_string(index=False))
     else:
-        print(f"\n  [WARNING] No RMSE data available for summary table")
+        print(f"\n  [WARNING] No error data available for summary table")
     
     return all_rmse_data
 
@@ -222,39 +222,39 @@ def main():
     
     combined_summary = []
     
-    for model, rmse_data in all_results.items():
+    for model, error_data in all_results.items():
         model_suffix = 'LR' if model == 'Linear' else 'XGB'
-        for resolution_name, rmse_by_datetime in rmse_data.items():
-            if len(rmse_by_datetime) > 0:
-                rmse_values = [rmse for _, rmse in rmse_by_datetime]
-                rmse_values = [r for r in rmse_values if not np.isnan(r)]
+        for resolution_name, error_by_datetime in error_data.items():
+            if len(error_by_datetime) > 0:
+                error_values = [err for _, err in error_by_datetime]
+                error_values = [e for e in error_values if not np.isnan(e)]
                 
-                if len(rmse_values) > 0:
-                    avg_rmse = np.mean(rmse_values)
-                    median_rmse = np.median(rmse_values)
-                    std_rmse = np.std(rmse_values)
-                    min_rmse = np.min(rmse_values)
-                    max_rmse = np.max(rmse_values)
-                    n_predictions = len(rmse_values)
+                if len(error_values) > 0:
+                    avg_error = np.mean(error_values)
+                    median_error = np.median(error_values)
+                    std_error = np.std(error_values)
+                    min_error = np.min(error_values)
+                    max_error = np.max(error_values)
+                    n_predictions = len(error_values)
                     
                     combined_summary.append({
                         'Model': model_suffix,
                         'Resolution': resolution_name,
-                        'Average_RMSE': avg_rmse,
-                        'Median_RMSE': median_rmse,
-                        'Std_RMSE': std_rmse,
-                        'Min_RMSE': min_rmse,
-                        'Max_RMSE': max_rmse,
+                        'Average_Error_Percentage_Points': avg_error,
+                        'Median_Error_Percentage_Points': median_error,
+                        'Std_Error_Percentage_Points': std_error,
+                        'Min_Error_Percentage_Points': min_error,
+                        'Max_Error_Percentage_Points': max_error,
                         'Number_of_Predictions': n_predictions
                     })
     
     # Save combined summary
     if len(combined_summary) > 0:
         combined_df = pd.DataFrame(combined_summary)
-        combined_csv_path = os.path.join(output_base_dir, 'average_rmse_boxplot_combined_XGB_LR.csv')
+        combined_csv_path = os.path.join(output_base_dir, 'average_error_boxplot_combined_XGB_LR.csv')
         combined_df.to_csv(combined_csv_path, index=False)
         print(f"\n  Combined Summary saved: {combined_csv_path}")
-        print(f"\n  Combined Average RMSE by Model and Resolution:")
+        print(f"\n  Combined Average Error by Model and Resolution:")
         print(combined_df.to_string(index=False))
     
     print(f"\n{'='*80}")

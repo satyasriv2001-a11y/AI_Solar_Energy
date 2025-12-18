@@ -40,48 +40,49 @@ sys.path.insert(0, script_dir)
 from multi_resolution_predictions_1140 import create_config_from_args, make_prediction_at_time
 
 
-def calculate_rmse_for_prediction(preds, gt):
+def calculate_average_error_for_prediction(preds, gt):
     """
-    Calculate RMSE for a single prediction (24-hour forecast).
+    Calculate average absolute error for a single prediction (24-hour forecast).
     
     Args:
-        preds: Predicted values (array)
-        gt: Ground truth values (array)
+        preds: Predicted values (array) - in percentage points (0-100)
+        gt: Ground truth values (array) - in percentage points (0-100)
     
     Returns:
-        RMSE value (float) or np.nan if insufficient valid data
+        Average absolute error in percentage points (float) or np.nan if insufficient valid data
     """
     # Filter out NaN values
     valid_mask = ~(np.isnan(preds) | np.isnan(gt))
     
-    if np.sum(valid_mask) < 2:  # Need at least 2 points for meaningful RMSE
+    if np.sum(valid_mask) < 1:  # Need at least 1 point
         return np.nan
     
     preds_valid = preds[valid_mask]
     gt_valid = gt[valid_mask]
     
-    mse = np.mean((preds_valid - gt_valid) ** 2)
-    rmse = np.sqrt(mse)
+    # Calculate absolute error in percentage points
+    abs_errors = np.abs(preds_valid - gt_valid)
+    avg_error = np.mean(abs_errors)
     
-    return rmse
+    return avg_error
 
 
-def run_predictions_and_calculate_rmse(data_path, config, resolution_minutes, test_intervals):
+def run_predictions_and_calculate_error(data_path, config, resolution_minutes, test_intervals):
     """
-    Run predictions and calculate RMSE for each prediction start time.
+    Run predictions and calculate average error for each prediction start time.
     
     Args:
         data_path: Path to data CSV file
         config: Configuration dictionary
-        resolution_minutes: Resolution in minutes (60, 30, or 15)
+        resolution_minutes: Resolution in minutes (60, 30, 15, or 10)
         test_intervals: Number of intervals to test
     
     Returns:
-        List of (prediction_start_datetime, rmse_value) tuples
+        List of (prediction_start_datetime, average_error_value) tuples
     """
     print("=" * 80)
     resolution_name = f"{resolution_minutes}-minute" if resolution_minutes < 60 else "hourly"
-    print(f"Running {resolution_name.upper()} Predictions for RMSE Box Plots")
+    print(f"Running {resolution_name.upper()} Predictions for Error Box Plots")
     print("=" * 80)
     print(f"Data file: {data_path}")
     print(f"Model: {config['experiment_name']}")
@@ -254,11 +255,11 @@ def run_predictions_and_calculate_rmse(data_path, config, resolution_minutes, te
                 time_idx, past_intervals, future_intervals, resolution_minutes
             )
             
-            # Calculate RMSE for this prediction
-            rmse = calculate_rmse_for_prediction(preds, gt)
+            # Calculate average error for this prediction
+            avg_error = calculate_average_error_for_prediction(preds, gt)
             
-            if not np.isnan(rmse):
-                rmse_by_datetime.append((pred_datetime, rmse))
+            if not np.isnan(avg_error):
+                rmse_by_datetime.append((pred_datetime, avg_error))
             
             if pred_num % 10 == 0 or pred_num == len(test_time_indices):
                 print(f"  [{pred_num}/{len(test_time_indices)}] Completed")
@@ -269,63 +270,53 @@ def run_predictions_and_calculate_rmse(data_path, config, resolution_minutes, te
             traceback.print_exc()
             continue
     
-    print(f"  Calculated RMSE for {len(rmse_by_datetime)} predictions")
+    print(f"  Calculated average error for {len(rmse_by_datetime)} predictions")
     
     return rmse_by_datetime, resolution_name
 
 
-def create_rmse_boxplots(rmse_by_datetime_list, output_dir, model_name, resolution_name, group_by='hour'):
+def create_error_boxplots(error_by_datetime_list, output_dir, model_name, resolution_name):
     """
-    Create box and whisker plots of RMSE values grouped by datetime.
+    Create box and whisker plots of average error values grouped by prediction start hour (0-23).
     
     Args:
-        rmse_by_datetime_list: List of (datetime, rmse) tuples
+        error_by_datetime_list: List of (datetime, average_error) tuples
         output_dir: Output directory for plots
         model_name: Name of the model
-        resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute")
-        group_by: How to group data ('hour', 'day', or '6hours')
+        resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute", "10-minute")
     """
-    if len(rmse_by_datetime_list) == 0:
-        print(f"  [WARNING] No RMSE data to plot for {resolution_name}")
+    if len(error_by_datetime_list) == 0:
+        print(f"  [WARNING] No error data to plot for {resolution_name}")
         return
     
     os.makedirs(output_dir, exist_ok=True)
     
     # Convert to DataFrame
-    df = pd.DataFrame(rmse_by_datetime_list, columns=['Datetime', 'RMSE'])
+    df = pd.DataFrame(error_by_datetime_list, columns=['Datetime', 'Average_Error'])
     df['Datetime'] = pd.to_datetime(df['Datetime'])
     
-    # Group by specified time interval
-    if group_by == 'hour':
-        df['Time_Group'] = df['Datetime'].dt.floor('H')
-        x_label = 'Hour'
-    elif group_by == 'day':
-        df['Time_Group'] = df['Datetime'].dt.floor('D')
-        x_label = 'Day'
-    elif group_by == '6hours':
-        df['Time_Group'] = df['Datetime'].dt.floor('6H')
-        x_label = '6-Hour Period'
-    else:
-        raise ValueError(f"Unknown group_by option: {group_by}. Use 'hour', 'day', or '6hours'")
+    # Extract hour (0-23) from datetime
+    df['Hour'] = df['Datetime'].dt.hour
     
-    # Remove groups with too few data points (less than 2)
-    group_counts = df.groupby('Time_Group').size()
-    valid_groups = group_counts[group_counts >= 2].index
-    df_filtered = df[df['Time_Group'].isin(valid_groups)]
+    # Group by hour (0-23)
+    # Remove hours with too few data points (less than 2)
+    hour_counts = df.groupby('Hour').size()
+    valid_hours = hour_counts[hour_counts >= 2].index
+    df_filtered = df[df['Hour'].isin(valid_hours)]
     
     if len(df_filtered) == 0:
-        print(f"  [WARNING] No valid groups with sufficient data points for {resolution_name}")
+        print(f"  [WARNING] No valid hours with sufficient data points for {resolution_name}")
         return
     
     # Create box plot
-    plt.figure(figsize=(20, 8))
+    plt.figure(figsize=(16, 8))
     
-    # Prepare data for box plot
-    groups = sorted(df_filtered['Time_Group'].unique())
-    rmse_data_by_group = [df_filtered[df_filtered['Time_Group'] == g]['RMSE'].values for g in groups]
+    # Prepare data for box plot - group by hour (0-23)
+    hours = sorted(df_filtered['Hour'].unique())
+    error_data_by_hour = [df_filtered[df_filtered['Hour'] == h]['Average_Error'].values for h in hours]
     
     # Create box plot
-    bp = plt.boxplot(rmse_data_by_group, labels=groups, patch_artist=True, widths=0.6)
+    bp = plt.boxplot(error_data_by_hour, labels=hours, patch_artist=True, widths=0.6)
     
     # Color the boxes
     colors = plt.cm.viridis(np.linspace(0, 0.8, len(bp['boxes'])))
@@ -333,44 +324,36 @@ def create_rmse_boxplots(rmse_by_datetime_list, output_dir, model_name, resoluti
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
     
-    # Format x-axis
+    # Format x-axis - show hours 0-23
     ax = plt.gca()
-    if group_by == 'hour':
-        ax.xaxis.set_major_locator(HourLocator(interval=6))
-        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
-        ax.xaxis.set_minor_locator(HourLocator(interval=1))
-    elif group_by == 'day':
-        ax.xaxis.set_major_locator(HourLocator(interval=24))
-        ax.xaxis.set_major_formatter(DateFormatter('%m-%d'))
-    elif group_by == '6hours':
-        ax.xaxis.set_major_locator(HourLocator(interval=6))
-        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+    ax.set_xlim(0.5, 23.5)
+    ax.set_xticks(range(24))
+    ax.set_xticklabels(range(24))
     
-    plt.xlabel(f'Prediction Start Time ({x_label})', fontsize=14, fontweight='bold')
-    plt.ylabel('RMSE (%)', fontsize=14, fontweight='bold')
-    plt.title(f'RMSE Distribution by Prediction Start Time - {model_name} ({resolution_name})\n'
-              f'Box plot shows RMSE distribution for 24-hour forecasts starting at each time',
+    plt.xlabel('Prediction Start Hour (0-23)', fontsize=14, fontweight='bold')
+    plt.ylabel('Average Error (Percentage Points)', fontsize=14, fontweight='bold')
+    plt.title(f'Average Error Distribution by Prediction Start Hour - {model_name} ({resolution_name})\n'
+              f'Box plot shows average error distribution for 24-hour forecasts starting at each hour',
               fontsize=16, fontweight='bold')
     plt.grid(True, alpha=0.3, axis='y')
-    plt.xticks(rotation=45, ha='right')
+    plt.xticks(rotation=0)
     plt.tight_layout()
     
-    output_path = os.path.join(output_dir, f"rmse_boxplot_{resolution_name.lower().replace('-', '_')}_{group_by}.png")
+    output_path = os.path.join(output_dir, f"error_boxplot_{resolution_name.lower().replace('-', '_')}_by_hour.png")
     plt.savefig(output_path, dpi=200, bbox_inches='tight')
     plt.close()
-    print(f"  RMSE box plot saved: {output_path}")
+    print(f"  Error box plot saved: {output_path}")
 
 
-def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by='hour'):
+def run_error_boxplots(data_path, config, output_dir, resolutions=None):
     """
-    Run RMSE box plots for multiple resolutions.
+    Run error box plots for multiple resolutions.
     
     Args:
         data_path: Path to data CSV file
         config: Configuration dictionary
         output_dir: Output directory for plots
-        resolutions: List of (resolution_minutes, test_intervals) tuples. If None, uses defaults
-        group_by: How to group data ('hour', 'day', or '6hours')
+        resolutions: List of (resolution_minutes, test_intervals, resolution_name) tuples. If None, uses defaults
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -381,8 +364,8 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
             (15, 96, "15-minute")    # 15 minutes, 96 intervals, "15-minute"
         ]
     
-    # Store RMSE data for each resolution for summary table
-    all_rmse_data = {}
+    # Store error data for each resolution for summary table
+    all_error_data = {}
     
     for resolution_minutes, test_intervals, resolution_name in resolutions:
         print(f"\n{'='*80}")
@@ -390,23 +373,22 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
         print(f"{'='*80}")
         
         try:
-            rmse_by_datetime, _ = run_predictions_and_calculate_rmse(
+            error_by_datetime, _ = run_predictions_and_calculate_error(
                 data_path, config, resolution_minutes, test_intervals
             )
             
-            if len(rmse_by_datetime) > 0:
-                # Store RMSE data for summary table
-                all_rmse_data[resolution_name] = rmse_by_datetime
+            if len(error_by_datetime) > 0:
+                # Store error data for summary table
+                all_error_data[resolution_name] = error_by_datetime
                 
-                # Create box plots with different grouping options
-                for group_option in [group_by] if isinstance(group_by, str) else group_by:
-                    create_rmse_boxplots(rmse_by_datetime, output_dir, 
-                                       config.get('experiment_name', 'Model'), 
-                                       resolution_name, group_by=group_option)
+                # Create box plots grouped by hour (0-23)
+                create_error_boxplots(error_by_datetime, output_dir, 
+                                     config.get('experiment_name', 'Model'), 
+                                     resolution_name)
                 
-                print(f"\n[SUCCESS] {resolution_name} resolution RMSE box plots completed")
+                print(f"\n[SUCCESS] {resolution_name} resolution error box plots completed")
             else:
-                print(f"\n[WARNING] No RMSE data generated for {resolution_name} resolution")
+                print(f"\n[WARNING] No error data generated for {resolution_name} resolution")
         
         except Exception as e:
             print(f"\n[ERROR] Failed {resolution_name} resolution: {str(e)}")
@@ -415,52 +397,52 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
             continue
     
     # =============================================================================
-    # CREATE SUMMARY TABLE: Average RMSE by Resolution
+    # CREATE SUMMARY TABLE: Average Error by Resolution
     # =============================================================================
     print(f"\n{'='*80}")
-    print("Creating Summary Table: Average RMSE by Resolution")
+    print("Creating Summary Table: Average Error by Resolution")
     print(f"{'='*80}")
     
-    rmse_summary = []
+    error_summary = []
     
-    for resolution_name, rmse_by_datetime in all_rmse_data.items():
-        if len(rmse_by_datetime) > 0:
-            # Extract RMSE values (ignore datetime, just get RMSE)
-            rmse_values = [rmse for _, rmse in rmse_by_datetime]
-            rmse_values = [r for r in rmse_values if not np.isnan(r)]  # Remove NaN values
+    for resolution_name, error_by_datetime in all_error_data.items():
+        if len(error_by_datetime) > 0:
+            # Extract error values (ignore datetime, just get error)
+            error_values = [err for _, err in error_by_datetime]
+            error_values = [e for e in error_values if not np.isnan(e)]  # Remove NaN values
             
-            if len(rmse_values) > 0:
-                avg_rmse = np.mean(rmse_values)
-                median_rmse = np.median(rmse_values)
-                std_rmse = np.std(rmse_values)
-                min_rmse = np.min(rmse_values)
-                max_rmse = np.max(rmse_values)
-                n_predictions = len(rmse_values)
+            if len(error_values) > 0:
+                avg_error = np.mean(error_values)
+                median_error = np.median(error_values)
+                std_error = np.std(error_values)
+                min_error = np.min(error_values)
+                max_error = np.max(error_values)
+                n_predictions = len(error_values)
                 
-                rmse_summary.append({
+                error_summary.append({
                     'Resolution': resolution_name,
-                    'Average_RMSE': avg_rmse,
-                    'Median_RMSE': median_rmse,
-                    'Std_RMSE': std_rmse,
-                    'Min_RMSE': min_rmse,
-                    'Max_RMSE': max_rmse,
+                    'Average_Error_Percentage_Points': avg_error,
+                    'Median_Error_Percentage_Points': median_error,
+                    'Std_Error_Percentage_Points': std_error,
+                    'Min_Error_Percentage_Points': min_error,
+                    'Max_Error_Percentage_Points': max_error,
                     'Number_of_Predictions': n_predictions
                 })
     
     # Save and display summary table
-    if len(rmse_summary) > 0:
-        rmse_summary_df = pd.DataFrame(rmse_summary)
-        rmse_summary_csv_path = os.path.join(output_dir, 'average_rmse_boxplot_by_resolution.csv')
-        rmse_summary_df.to_csv(rmse_summary_csv_path, index=False)
-        print(f"\n  Average RMSE Summary saved: {rmse_summary_csv_path}")
-        print(f"\n  Average RMSE by Resolution (from box plot data):")
-        print(f"  Note: Average RMSE across all prediction start times for each resolution")
-        print(rmse_summary_df.to_string(index=False))
+    if len(error_summary) > 0:
+        error_summary_df = pd.DataFrame(error_summary)
+        error_summary_csv_path = os.path.join(output_dir, 'average_error_boxplot_by_resolution.csv')
+        error_summary_df.to_csv(error_summary_csv_path, index=False)
+        print(f"\n  Average Error Summary saved: {error_summary_csv_path}")
+        print(f"\n  Average Error by Resolution (from box plot data):")
+        print(f"  Note: Average error across all prediction start times for each resolution")
+        print(error_summary_df.to_string(index=False))
     else:
-        print(f"\n  [WARNING] No RMSE data available for summary table")
+        print(f"\n  [WARNING] No error data available for summary table")
     
     print(f"\n{'='*80}")
-    print("[SUCCESS] RMSE Box Plot Generation Completed!")
+    print("[SUCCESS] Error Box Plot Generation Completed!")
     print(f"Output directory: {output_dir}")
     print(f"{'='*80}")
 
@@ -470,7 +452,7 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
 # =============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Create RMSE box plots for multi-resolution predictions',
+        description='Create error box plots for multi-resolution predictions (grouped by hour 0-23)',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -493,17 +475,13 @@ if __name__ == "__main__":
     parser.add_argument('--no-time-encoding', dest='use_time_encoding', action='store_false',
                        help='Disable time encoding features')
     parser.add_argument('--output-dir', type=str, default=None,
-                       help='Output directory for plots (default: ./rmse_boxplots_<model>_<scenario>)')
-    parser.add_argument('--group-by', type=str, default='hour',
-                       choices=['hour', 'day', '6hours'],
-                       help='How to group RMSE values by time (default: hour)')
+                       help='Output directory for plots (default: ./error_boxplots_<model>_<scenario>)')
     
     args = parser.parse_args()
     
     print("\n" + "=" * 80)
-    print("MODE: RMSE Box and Whisker Plots")
+    print("MODE: Error Box and Whisker Plots (Grouped by Hour 0-23)")
     print(f"Algorithm: {args.model} {args.complexity} {args.scenario}")
-    print(f"Group by: {args.group_by}")
     print("=" * 80 + "\n")
     
     config = create_config_from_args(
@@ -512,13 +490,13 @@ if __name__ == "__main__":
     )
     
     if args.output_dir is None:
-        output_dir = os.path.join(script_dir, f"rmse_boxplots_{args.model}_{args.scenario}")
+        output_dir = os.path.join(script_dir, f"error_boxplots_{args.model}_{args.scenario}")
     else:
         output_dir = args.output_dir
     
     try:
-        run_rmse_boxplots(
-            args.data_path, config, output_dir, group_by=args.group_by
+        run_error_boxplots(
+            args.data_path, config, output_dir
         )
     except Exception as e:
         print(f"\n[ERROR] Failed: {str(e)}")
