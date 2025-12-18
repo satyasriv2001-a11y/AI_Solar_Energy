@@ -370,6 +370,80 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
     return output_paths
 
 
+def create_big_overlay_plot(all_predictions, output_path, model_name, resolution_name):
+    """
+    Create one big overlay plot showing all predictions (prediction - actual) differences at once.
+    
+    Args:
+        all_predictions: List of (pred_df, pred_num, pred_datetime) tuples
+        output_path: Path to save the plot
+        model_name: Name of the model
+        resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute")
+    
+    Returns:
+        Output file path
+    """
+    num_predictions = len(all_predictions)
+    
+    plt.figure(figsize=(32, 14))
+    
+    colors = plt.cm.tab20(np.linspace(0, 1, num_predictions))
+    
+    # Collect all datetimes
+    all_datetimes = set()
+    
+    # Plot (prediction - actual) differences for all predictions
+    for idx, (pred_df, pred_num, pred_datetime) in enumerate(all_predictions):
+        # Calculate prediction - actual difference
+        differences = pred_df['Predicted_Capacity_Factor'] - pred_df['Ground_Truth_Capacity_Factor']
+        # Only plot where both values are valid
+        valid_mask = ~(pred_df['Predicted_Capacity_Factor'].isna() | pred_df['Ground_Truth_Capacity_Factor'].isna())
+        valid_datetimes = pred_df.loc[valid_mask, 'Datetime']
+        valid_differences = differences.loc[valid_mask]
+        
+        plt.plot(valid_datetimes, valid_differences, 
+                label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
+                linewidth=1.5, alpha=0.5, color=colors[idx])
+        all_datetimes.update(valid_datetimes)
+    
+    # Add horizontal line at y=0 for reference
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=2, alpha=0.7, label='Zero Error')
+    
+    # Set x-axis limits based on all data
+    all_datetimes_sorted = sorted(list(all_datetimes))
+    if all_datetimes_sorted:
+        x_min = min(all_datetimes_sorted)
+        x_max = max(all_datetimes_sorted)
+        x_range = x_max - x_min
+        plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+    
+    # Format x-axis
+    ax = plt.gca()
+    if all_datetimes_sorted:
+        ax.xaxis.set_major_locator(HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+        ax.xaxis.set_minor_locator(HourLocator(interval=1))
+    
+    plt.xlabel('Datetime', fontsize=42, fontweight='bold')
+    plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=42, fontweight='bold')
+    
+    title = f'All Prediction Errors Overlay - {model_name} ({resolution_name})\n'
+    title += f'All {num_predictions} prediction intervals (24-hour ahead forecasts)'
+    
+    plt.title(title, fontsize=48, fontweight='bold')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=18, ncol=1)
+    ax.tick_params(labelsize=30)
+    plt.grid(True, alpha=0.3, which='both')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"  Big overlay plot saved: {output_path} (All {num_predictions} predictions)")
+    
+    return output_path
+
+
 def create_ground_truth_plot(all_predictions, output_path, model_name, resolution_name):
     """
     Create a separate plot showing ground truth values.
@@ -776,9 +850,11 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             if len(all_predictions) > 0:
                 # Create overlay plot(s) - may create multiple if more than 12 predictions
                 overlay_path = os.path.join(output_dir, f"overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
+                big_overlay_path = os.path.join(output_dir, f"big_overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
                 ground_truth_path = os.path.join(output_dir, f"ground_truth_plot_{resolution_name.lower().replace('-', '_')}.png")
                 model_name = config.get('experiment_name', 'Model')
                 overlay_paths = create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name, max_predictions_per_plot=12)
+                big_overlay_plot_path = create_big_overlay_plot(all_predictions, big_overlay_path, model_name, resolution_name)
                 ground_truth_plot_path = create_ground_truth_plot(all_predictions, ground_truth_path, model_name, resolution_name)
                 
                 # Store RMSE data for later (we'll create plots after determining common y-axis scale)
@@ -786,6 +862,7 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                     'predictions': all_predictions,
                     'hourly_rmse': hourly_rmse_data,
                     'overlay_paths': overlay_paths,
+                    'big_overlay_path': big_overlay_plot_path,
                     'ground_truth_path': ground_truth_plot_path,
                     'all_pred_data': all_pred_data  # Store prediction data for 10AM-6PM RMSE
                 }
@@ -798,6 +875,8 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                     print(f"  Overlay plots ({len(overlay_paths)} parts):")
                     for path in overlay_paths:
                         print(f"    - {path}")
+                if big_overlay_plot_path:
+                    print(f"  Big overlay plot (all predictions): {big_overlay_plot_path}")
                 if ground_truth_plot_path:
                     print(f"  Ground truth plot: {ground_truth_plot_path}")
             else:
