@@ -108,7 +108,7 @@ def run_predictions_and_calculate_rmse(data_path, config, resolution_minutes, te
         df_indexed = df.set_index('Datetime')
         
         # Resample to target resolution
-        freq_map = {60: 'H', 30: '30T', 15: '15T'}
+        freq_map = {60: 'H', 30: '30T', 15: '15T', 10: '10T'}
         freq = freq_map.get(resolution_minutes, 'H')
         df_resampled = df_indexed.resample(freq).asfreq()
         

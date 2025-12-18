@@ -310,7 +310,7 @@ def make_prediction_at_time(model, config, df_clean, hist_feats, fcst_feats, sca
 
     Args:
 
-        resolution_minutes: Resolution in minutes (60, 30, or 15)
+        resolution_minutes: Resolution in minutes (60, 30, 15, or 10)
 
     """
 
@@ -524,7 +524,7 @@ def make_prediction_at_time(model, config, df_clean, hist_feats, fcst_feats, sca
 
     # Create future datetimes based on resolution
 
-    freq_map = {60: 'H', 30: '30T', 15: '15T'}
+    freq_map = {60: 'H', 30: '30T', 15: '15T', 10: '10T'}
 
     freq = freq_map.get(resolution_minutes, 'H')
 
@@ -1180,9 +1180,9 @@ def run_predictions_at_resolution(data_path, config, output_dir, resolution_minu
 
     Args:
 
-        resolution_minutes: Resolution in minutes (60, 30, or 15)
+        resolution_minutes: Resolution in minutes (60, 30, 15, or 10)
 
-        test_intervals: Number of intervals to test (e.g., 24 for hourly, 48 for 30-min, 96 for 15-min)
+        test_intervals: Number of intervals to test (e.g., 24 for hourly, 48 for 30-min, 96 for 15-min, 144 for 10-min)
 
     
 
@@ -1254,7 +1254,7 @@ def run_predictions_at_resolution(data_path, config, output_dir, resolution_minu
 
         # Resample to target resolution
 
-        freq_map = {60: 'H', 30: '30T', 15: '15T'}
+        freq_map = {60: 'H', 30: '30T', 15: '15T', 10: '10T'}
 
         freq = freq_map.get(resolution_minutes, 'H')
 
