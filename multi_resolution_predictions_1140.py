@@ -2166,7 +2166,7 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
 
         
 
-        # Calculate error percentage (absolute error as % of ground truth)
+        # Calculate absolute error in percentage points (matches what plots show)
 
         valid_mask = ~(pred_df['Predicted'].isna() | pred_df['Ground_Truth'].isna())
 
@@ -2178,37 +2178,25 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
 
             
 
-            # Calculate absolute error as percentage
+            # Calculate absolute error in percentage points (not relative %)
 
-            # Error % = |Predicted - Ground_Truth| / Ground_Truth * 100
+            # This matches what the plots show: |Predicted - Ground_Truth| in percentage points
 
-            # Handle division by zero
+            # Since capacity factor is already 0-100%, this is the absolute difference
 
             abs_errors = np.abs(preds_valid - gt_valid)
 
-            error_percentages = np.where(gt_valid != 0, 
-
-                                        (abs_errors / gt_valid) * 100, 
-
-                                        np.where(abs_errors != 0, np.inf, 0))
-
             
 
-            # Remove infinite values
+            if len(abs_errors) > 0:
 
-            error_percentages = error_percentages[np.isfinite(error_percentages)]
+                avg_error_pct = np.mean(abs_errors)
 
-            
+                median_error_pct = np.median(abs_errors)
 
-            if len(error_percentages) > 0:
+                std_error_pct = np.std(abs_errors)
 
-                avg_error_pct = np.mean(error_percentages)
-
-                median_error_pct = np.median(error_percentages)
-
-                std_error_pct = np.std(error_percentages)
-
-                n_samples = len(error_percentages)
+                n_samples = len(abs_errors)
 
                 
 
@@ -2216,11 +2204,11 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
 
                     'Resolution': resolution_name,
 
-                    'Average_Error_Percent': avg_error_pct,
+                    'Average_Error_Percentage_Points': avg_error_pct,
 
-                    'Median_Error_Percent': median_error_pct,
+                    'Median_Error_Percentage_Points': median_error_pct,
 
-                    'Std_Error_Percent': std_error_pct,
+                    'Std_Error_Percentage_Points': std_error_pct,
 
                     'Number_of_Samples': n_samples
 
@@ -2234,13 +2222,15 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
 
         error_df = pd.DataFrame(error_summary)
 
-        error_csv_path = os.path.join(output_dir, 'average_error_percent_by_resolution.csv')
+        error_csv_path = os.path.join(output_dir, 'average_error_percentage_points_by_resolution.csv')
 
         error_df.to_csv(error_csv_path, index=False)
 
-        print(f"\n  Average Error % Summary saved: {error_csv_path}")
+        print(f"\n  Average Error (Percentage Points) Summary saved: {error_csv_path}")
 
-        print(f"\n  Average Error % by Resolution:")
+        print(f"\n  Average Error (Percentage Points) by Resolution:")
+
+        print(f"  Note: This shows absolute error in percentage points (matches plot values)")
 
         print(error_df.to_string(index=False))
 
