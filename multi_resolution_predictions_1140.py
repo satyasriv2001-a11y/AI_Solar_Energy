@@ -652,8 +652,6 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
             plt.plot(valid_datetimes, valid_differences, 
 
-                    label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
-
                     linewidth=1.5, alpha=0.6, color=colors[idx])
 
             plot_datetimes.update(valid_datetimes)
@@ -662,7 +660,7 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
         # Add horizontal line at y=0 for reference
 
-        plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5, label='Zero Error')
+        plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
 
         
 
@@ -719,8 +717,6 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
         
 
         plt.title(title, fontsize=24, fontweight='bold')
-
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=14, ncol=1)
 
         plt.grid(True, alpha=0.3, which='both')
 
@@ -822,8 +818,6 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
         plt.plot(valid_datetimes, valid_differences, 
 
-                label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
-
                 linewidth=1.5, alpha=0.5, color=colors[idx])
 
         all_datetimes.update(valid_datetimes)
@@ -832,7 +826,7 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
     # Add horizontal line at y=0 for reference
 
-    plt.axhline(y=0, color='black', linestyle='--', linewidth=2, alpha=0.7, label='Zero Error')
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=2, alpha=0.7)
 
     
 
@@ -879,8 +873,6 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
     
 
     plt.title(title, fontsize=24, fontweight='bold')
-
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=14, ncol=1)
 
     plt.grid(True, alpha=0.3, which='both')
 
@@ -984,7 +976,7 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
 
     plt.plot(sorted_datetimes, sorted_values, 
 
-            label='Ground Truth', linewidth=3, color='black', marker='o', 
+            linewidth=3, color='black', marker='o', 
 
             markersize=6, alpha=0.9)
 
@@ -1027,8 +1019,6 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
               f'Actual capacity factor values across all prediction intervals', 
 
               fontsize=24, fontweight='bold')
-
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=16)
 
     plt.grid(True, alpha=0.3, which='both')
 
