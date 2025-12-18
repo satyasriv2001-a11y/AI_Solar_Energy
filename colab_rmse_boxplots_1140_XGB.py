@@ -43,10 +43,10 @@ drive.mount('/content/drive')
 
 !python batch_create_configs.py
 
-# 5. Run RMSE Box Plots on Project1140 with XGB high PV+NWP 24h no TE
+# 5. Run Error Box Plots on Project1140 with XGBoost high PV+NWP 24h no TE
 # This will process only Project1140.csv
 # Results save directly to Drive!
-# Generates box plots showing RMSE distribution by prediction start time
+# Generates box plots showing average error distribution by prediction start hour (0-23)
 
 import subprocess
 import os
@@ -68,9 +68,11 @@ if len(project1140_files) == 0:
     print(f"Available files: {[os.path.basename(f) for f in csv_files[:10]]}")
 else:
     print("=" * 80)
-    print("Running RMSE Box Plots on Project1140")
+    print("Running Error Box Plots on Project1140")
     print("=" * 80)
-    print(f"Configuration: XGB high complexity, PV+NWP, 24h lookback, NO time encoding")
+    print(f"Configuration: XGBoost high complexity, PV+NWP, 24h lookback, NO time encoding")
+    print(f"X-axis: Prediction start hour (0-23)")
+    print(f"Y-axis: Average error (percentage points)")
     print(f"Output directory: {DRIVE_PATH}")
     print("=" * 80)
     print(f"\nFound {len(project1140_files)} Project1140 file(s):")
@@ -100,7 +102,7 @@ else:
             print(f"Files in directory: {os.listdir('.')[:10]}")
             continue
         
-        # Run RMSE box plots
+        # Run error box plots
         cmd = [
             'python', script_path,
             '--data-path', data_path,
@@ -109,8 +111,7 @@ else:
             '--scenario', 'PV+NWP',
             '--lookback', '24',
             '--no-time-encoding',
-            '--output-dir', output_dir,
-            '--group-by', 'hour'
+            '--output-dir', output_dir
         ]
         
         print(f"\nRunning command:")
@@ -132,12 +133,12 @@ else:
             print(result.stdout[-2000:])  # Last 2000 chars
     
     print(f"\n{'='*80}")
-    print("[SUCCESS] RMSE Box Plot Generation Completed!")
+    print("[SUCCESS] Error Box Plot Generation Completed!")
     print(f"Results saved to: {DRIVE_PATH}")
     print(f"{'='*80}")
     print("\nGenerated files:")
-    print("  - rmse_boxplot_hourly_hour.png (RMSE box plot grouped by hour for hourly resolution)")
-    print("  - rmse_boxplot_30_minute_hour.png (RMSE box plot grouped by hour for 30-minute resolution)")
-    print("  - rmse_boxplot_15_minute_hour.png (RMSE box plot grouped by hour for 15-minute resolution)")
-    print("\nNote: Each box plot shows RMSE distribution for 24-hour forecasts starting at each time interval")
-
+    print("  - error_boxplot_hourly_by_hour.png (Error box plot by hour 0-23 for hourly resolution)")
+    print("  - error_boxplot_30_minute_by_hour.png (Error box plot by hour 0-23 for 30-minute resolution)")
+    print("  - error_boxplot_15_minute_by_hour.png (Error box plot by hour 0-23 for 15-minute resolution)")
+    print("  - average_error_boxplot_by_resolution.csv (Summary table)")
+    print("\nNote: Each box plot shows average error distribution for 24-hour forecasts starting at each hour (0-23)")
