@@ -2120,6 +2120,204 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
 
     
 
+    # =============================================================================
+
+    # CREATE SUMMARY TABLES
+
+    # =============================================================================
+
+    print(f"\n{'='*80}")
+
+    print("Creating Summary Tables")
+
+    print(f"{'='*80}")
+
+    
+
+    # Summary Table 1: Average Error % by Resolution
+
+    error_summary = []
+
+    
+
+    for resolution_name, resolution_data in all_results.items():
+
+        all_pred_data = resolution_data.get('all_pred_data', [])
+
+        
+
+        if len(all_pred_data) == 0:
+
+            continue
+
+        
+
+        # Convert to DataFrame
+
+        pred_df = pd.DataFrame(all_pred_data, columns=['Datetime', 'Predicted', 'Ground_Truth'])
+
+        pred_df['Datetime'] = pd.to_datetime(pred_df['Datetime'])
+
+        
+
+        # Remove duplicates to avoid counting overlapping predictions multiple times
+
+        pred_df = pred_df.drop_duplicates(subset=['Datetime'], keep='first')
+
+        
+
+        # Calculate error percentage (absolute error as % of ground truth)
+
+        valid_mask = ~(pred_df['Predicted'].isna() | pred_df['Ground_Truth'].isna())
+
+        if valid_mask.sum() > 0:
+
+            preds_valid = pred_df.loc[valid_mask, 'Predicted'].values
+
+            gt_valid = pred_df.loc[valid_mask, 'Ground_Truth'].values
+
+            
+
+            # Calculate absolute error as percentage
+
+            # Error % = |Predicted - Ground_Truth| / Ground_Truth * 100
+
+            # Handle division by zero
+
+            abs_errors = np.abs(preds_valid - gt_valid)
+
+            error_percentages = np.where(gt_valid != 0, 
+
+                                        (abs_errors / gt_valid) * 100, 
+
+                                        np.where(abs_errors != 0, np.inf, 0))
+
+            
+
+            # Remove infinite values
+
+            error_percentages = error_percentages[np.isfinite(error_percentages)]
+
+            
+
+            if len(error_percentages) > 0:
+
+                avg_error_pct = np.mean(error_percentages)
+
+                median_error_pct = np.median(error_percentages)
+
+                std_error_pct = np.std(error_percentages)
+
+                n_samples = len(error_percentages)
+
+                
+
+                error_summary.append({
+
+                    'Resolution': resolution_name,
+
+                    'Average_Error_Percent': avg_error_pct,
+
+                    'Median_Error_Percent': median_error_pct,
+
+                    'Std_Error_Percent': std_error_pct,
+
+                    'Number_of_Samples': n_samples
+
+                })
+
+    
+
+    # Save and display Average Error % summary
+
+    if len(error_summary) > 0:
+
+        error_df = pd.DataFrame(error_summary)
+
+        error_csv_path = os.path.join(output_dir, 'average_error_percent_by_resolution.csv')
+
+        error_df.to_csv(error_csv_path, index=False)
+
+        print(f"\n  Average Error % Summary saved: {error_csv_path}")
+
+        print(f"\n  Average Error % by Resolution:")
+
+        print(error_df.to_string(index=False))
+
+    else:
+
+        print(f"\n  [WARNING] No error data available for summary table")
+
+    
+
+    # Summary Table 2: Average RMSE by Resolution
+
+    rmse_summary = []
+
+    
+
+    for resolution_name, hourly_rmse_data in all_hourly_rmse_data:
+
+        if len(hourly_rmse_data) > 0:
+
+            rmse_vals = [item[1] for item in hourly_rmse_data]
+
+            avg_rmse = np.mean(rmse_vals)
+
+            median_rmse = np.median(rmse_vals)
+
+            std_rmse = np.std(rmse_vals)
+
+            min_rmse = np.min(rmse_vals)
+
+            max_rmse = np.max(rmse_vals)
+
+            n_hours = len(rmse_vals)
+
+            
+
+            rmse_summary.append({
+
+                'Resolution': resolution_name,
+
+                'Average_RMSE': avg_rmse,
+
+                'Median_RMSE': median_rmse,
+
+                'Std_RMSE': std_rmse,
+
+                'Min_RMSE': min_rmse,
+
+                'Max_RMSE': max_rmse,
+
+                'Number_of_Hours': n_hours
+
+            })
+
+    
+
+    # Save and display Average RMSE summary
+
+    if len(rmse_summary) > 0:
+
+        rmse_summary_df = pd.DataFrame(rmse_summary)
+
+        rmse_summary_csv_path = os.path.join(output_dir, 'average_rmse_by_resolution.csv')
+
+        rmse_summary_df.to_csv(rmse_summary_csv_path, index=False)
+
+        print(f"\n  Average RMSE Summary saved: {rmse_summary_csv_path}")
+
+        print(f"\n  Average RMSE by Resolution:")
+
+        print(rmse_summary_df.to_string(index=False))
+
+    else:
+
+        print(f"\n  [WARNING] No RMSE data available for summary table")
+
+    
+
     print(f"\n{'='*80}")
 
     print("[SUCCESS] Multi-Resolution Predictions Completed!")
