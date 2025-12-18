@@ -273,7 +273,7 @@ def make_prediction_at_time(model, config, df_clean, hist_feats, fcst_feats, sca
 # =============================================================================
 def create_overlay_plot(all_predictions, output_path, model_name, resolution_name, max_predictions_per_plot=12):
     """
-    Create overlay plots for all predictions at a given resolution.
+    Create overlay plots for all predictions showing (prediction - actual) differences.
     If there are more than max_predictions_per_plot predictions, creates multiple plots.
     
     Args:
@@ -290,15 +290,6 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
     num_plots = (num_predictions + max_predictions_per_plot - 1) // max_predictions_per_plot  # Ceiling division
     
     output_paths = []
-    
-    # Collect ground truth (shared across all plots)
-    gt_dict = {}
-    for pred_df, _, _ in all_predictions:
-        if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
-            for dt, gt_val in zip(pred_df['Datetime'], pred_df['Ground_Truth_Capacity_Factor']):
-                if not pd.isna(gt_val):
-                    if dt not in gt_dict or pd.isna(gt_dict[dt]):
-                        gt_dict[dt] = gt_val
     
     # Create each plot
     for plot_idx in range(num_plots):
@@ -321,33 +312,22 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
         # Collect datetimes for this specific plot only
         plot_datetimes = set()
         
-        # Plot predictions for this chunk
+        # Plot (prediction - actual) differences for this chunk
         for idx, (pred_df, pred_num, pred_datetime) in enumerate(plot_predictions):
-            plt.plot(pred_df['Datetime'], pred_df['Predicted_Capacity_Factor'], 
+            # Calculate prediction - actual difference
+            differences = pred_df['Predicted_Capacity_Factor'] - pred_df['Ground_Truth_Capacity_Factor']
+            # Only plot where both values are valid
+            valid_mask = ~(pred_df['Predicted_Capacity_Factor'].isna() | pred_df['Ground_Truth_Capacity_Factor'].isna())
+            valid_datetimes = pred_df.loc[valid_mask, 'Datetime']
+            valid_differences = differences.loc[valid_mask]
+            
+            plt.plot(valid_datetimes, valid_differences, 
                     label=f'Pred {pred_num} ({pred_datetime.strftime("%m-%d %H:%M")})',
                     linewidth=1.5, alpha=0.6, color=colors[idx])
-            plot_datetimes.update(pred_df['Datetime'])
+            plot_datetimes.update(valid_datetimes)
         
-        # Plot ground truth, but only for the time range of this plot
-        if gt_dict:
-            # Filter ground truth to only show datetimes within this plot's range
-            plot_datetimes_sorted = sorted(list(plot_datetimes))
-            if plot_datetimes_sorted:
-                plot_x_min = min(plot_datetimes_sorted)
-                plot_x_max = max(plot_datetimes_sorted)
-                
-                # Filter ground truth to this range
-                filtered_gt_datetimes = []
-                filtered_gt_values = []
-                for dt in sorted(gt_dict.keys()):
-                    if plot_x_min <= dt <= plot_x_max:
-                        filtered_gt_datetimes.append(dt)
-                        filtered_gt_values.append(gt_dict[dt])
-                
-                if filtered_gt_datetimes:
-                    plt.plot(filtered_gt_datetimes, filtered_gt_values, 
-                            label='Ground Truth', linewidth=3, color='black', marker='o', 
-                            markersize=6, alpha=0.9, zorder=100)
+        # Add horizontal line at y=0 for reference
+        plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5, label='Zero Error')
         
         # Set x-axis limits based on this plot's data only
         plot_datetimes_sorted = sorted(list(plot_datetimes))
@@ -365,14 +345,14 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
             ax.xaxis.set_minor_locator(HourLocator(interval=1))
         
         plt.xlabel('Datetime', fontsize=14, fontweight='bold')
-        plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=14, fontweight='bold')
         
         # Title indicates which part this is
         if num_plots > 1:
-            title = f'All Predictions Overlay - {model_name} ({resolution_name}) - Part {plot_idx + 1}/{num_plots}\n'
+            title = f'Prediction Error Overlay - {model_name} ({resolution_name}) - Part {plot_idx + 1}/{num_plots}\n'
             title += f'Predictions {start_idx + 1}-{end_idx} of {num_predictions} (24-hour ahead forecasts)'
         else:
-            title = f'All Predictions Overlay - {model_name} ({resolution_name})\n'
+            title = f'Prediction Error Overlay - {model_name} ({resolution_name})\n'
             title += f'{num_predictions} prediction intervals (24-hour ahead forecasts)'
         
         plt.title(title, fontsize=16, fontweight='bold')
@@ -387,6 +367,74 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
         output_paths.append(plot_output_path)
     
     return output_paths
+
+
+def create_ground_truth_plot(all_predictions, output_path, model_name, resolution_name):
+    """
+    Create a separate plot showing ground truth values.
+    
+    Args:
+        all_predictions: List of (pred_df, pred_num, pred_datetime) tuples
+        output_path: Path to save the plot
+        model_name: Name of the model
+        resolution_name: Resolution name (e.g., "Hourly", "30-minute", "15-minute")
+    
+    Returns:
+        Output file path
+    """
+    plt.figure(figsize=(24, 10))
+    
+    # Collect ground truth (shared across all predictions)
+    gt_dict = {}
+    for pred_df, _, _ in all_predictions:
+        if not pred_df['Ground_Truth_Capacity_Factor'].isna().all():
+            for dt, gt_val in zip(pred_df['Datetime'], pred_df['Ground_Truth_Capacity_Factor']):
+                if not pd.isna(gt_val):
+                    if dt not in gt_dict or pd.isna(gt_dict[dt]):
+                        gt_dict[dt] = gt_val
+    
+    if not gt_dict:
+        print(f"  [WARNING] No ground truth data to plot for {resolution_name}")
+        return None
+    
+    # Sort by datetime
+    sorted_datetimes = sorted(gt_dict.keys())
+    sorted_values = [gt_dict[dt] for dt in sorted_datetimes]
+    
+    # Plot ground truth
+    plt.plot(sorted_datetimes, sorted_values, 
+            label='Ground Truth', linewidth=3, color='black', marker='o', 
+            markersize=6, alpha=0.9)
+    
+    # Set x-axis limits
+    if sorted_datetimes:
+        x_min = min(sorted_datetimes)
+        x_max = max(sorted_datetimes)
+        x_range = x_max - x_min
+        plt.xlim(x_min - 0.02 * x_range, x_max + 0.02 * x_range)
+    
+    # Format x-axis
+    ax = plt.gca()
+    if sorted_datetimes:
+        ax.xaxis.set_major_locator(HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(DateFormatter('%m-%d %H:00'))
+        ax.xaxis.set_minor_locator(HourLocator(interval=1))
+    
+    plt.xlabel('Datetime', fontsize=14, fontweight='bold')
+    plt.ylabel('Capacity Factor (%)', fontsize=14, fontweight='bold')
+    plt.title(f'Ground Truth - {model_name} ({resolution_name})\n'
+              f'Actual capacity factor values across all prediction intervals', 
+              fontsize=16, fontweight='bold')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)
+    plt.grid(True, alpha=0.3, which='both')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"  Ground truth plot saved: {output_path}")
+    
+    return output_path
 
 
 def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolution_name, y_axis_limits=None):
@@ -725,14 +773,17 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
             if len(all_predictions) > 0:
                 # Create overlay plot(s) - may create multiple if more than 12 predictions
                 overlay_path = os.path.join(output_dir, f"overlay_plot_{resolution_name.lower().replace('-', '_')}.png")
+                ground_truth_path = os.path.join(output_dir, f"ground_truth_plot_{resolution_name.lower().replace('-', '_')}.png")
                 model_name = config.get('experiment_name', 'Model')
                 overlay_paths = create_overlay_plot(all_predictions, overlay_path, model_name, resolution_name, max_predictions_per_plot=12)
+                ground_truth_plot_path = create_ground_truth_plot(all_predictions, ground_truth_path, model_name, resolution_name)
                 
                 # Store RMSE data for later (we'll create plots after determining common y-axis scale)
                 all_results[resolution_name] = {
                     'predictions': all_predictions,
                     'hourly_rmse': hourly_rmse_data,
                     'overlay_paths': overlay_paths,
+                    'ground_truth_path': ground_truth_plot_path,
                     'all_pred_data': all_pred_data  # Store prediction data for 10AM-6PM RMSE
                 }
                 all_hourly_rmse_data.append((resolution_name, hourly_rmse_data))
@@ -744,6 +795,8 @@ def run_multi_resolution_predictions(data_path, config, output_dir, plant_name=N
                     print(f"  Overlay plots ({len(overlay_paths)} parts):")
                     for path in overlay_paths:
                         print(f"    - {path}")
+                if ground_truth_plot_path:
+                    print(f"  Ground truth plot: {ground_truth_plot_path}")
             else:
                 print(f"\n[WARNING] No predictions generated for {resolution_name} resolution")
         
