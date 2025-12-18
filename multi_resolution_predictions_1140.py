@@ -616,9 +616,9 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
         
 
-        # Set larger font sizes globally for this figure
+        # Set larger font sizes globally for this figure (50% increase)
 
-        plt.rcParams.update({'font.size': 18})
+        plt.rcParams.update({'font.size': 27})
 
         
 
@@ -652,7 +652,7 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
             plt.plot(valid_datetimes, valid_differences, 
 
-                    linewidth=1.5, alpha=0.6, color=colors[idx])
+                    linewidth=3.0, alpha=0.85, color=colors[idx])
 
             plot_datetimes.update(valid_datetimes)
 
@@ -660,7 +660,7 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
         # Add horizontal line at y=0 for reference
 
-        plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        plt.axhline(y=0, color='black', linestyle='--', linewidth=2.5, alpha=0.8)
 
         
 
@@ -694,9 +694,9 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
         
 
-        plt.xlabel('Datetime', fontsize=22, fontweight='bold')
+        plt.xlabel('Datetime', fontsize=33, fontweight='bold')
 
-        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=22, fontweight='bold')
+        plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=33, fontweight='bold')
 
         
 
@@ -716,13 +716,13 @@ def create_overlay_plot(all_predictions, output_path, model_name, resolution_nam
 
         
 
-        plt.title(title, fontsize=24, fontweight='bold')
+        plt.title(title, fontsize=36, fontweight='bold')
 
         plt.grid(True, alpha=0.3, which='both')
 
-        plt.xticks(rotation=45, ha='right', fontsize=16)
+        plt.xticks(rotation=45, ha='right', fontsize=24)
 
-        plt.yticks(fontsize=16)
+        plt.yticks(fontsize=24)
 
         plt.tight_layout()
 
@@ -782,9 +782,9 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
     
 
-    # Set larger font sizes globally for this figure
+    # Set larger font sizes globally for this figure (50% increase)
 
-    plt.rcParams.update({'font.size': 18})
+    plt.rcParams.update({'font.size': 27})
 
     
 
@@ -818,7 +818,7 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
         plt.plot(valid_datetimes, valid_differences, 
 
-                linewidth=1.5, alpha=0.5, color=colors[idx])
+                linewidth=3.0, alpha=0.85, color=colors[idx])
 
         all_datetimes.update(valid_datetimes)
 
@@ -826,7 +826,7 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
     # Add horizontal line at y=0 for reference
 
-    plt.axhline(y=0, color='black', linestyle='--', linewidth=2, alpha=0.7)
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=3.0, alpha=0.9)
 
     
 
@@ -860,9 +860,9 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
     
 
-    plt.xlabel('Datetime', fontsize=22, fontweight='bold')
+    plt.xlabel('Datetime', fontsize=33, fontweight='bold')
 
-    plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=22, fontweight='bold')
+    plt.ylabel('Prediction Error (Predicted - Actual) (%)', fontsize=33, fontweight='bold')
 
     
 
@@ -872,13 +872,13 @@ def create_big_overlay_plot(all_predictions, output_path, model_name, resolution
 
     
 
-    plt.title(title, fontsize=24, fontweight='bold')
+    plt.title(title, fontsize=36, fontweight='bold')
 
     plt.grid(True, alpha=0.3, which='both')
 
-    plt.xticks(rotation=45, ha='right', fontsize=16)
+    plt.xticks(rotation=45, ha='right', fontsize=24)
 
-    plt.yticks(fontsize=16)
+    plt.yticks(fontsize=24)
 
     plt.tight_layout()
 
@@ -932,9 +932,9 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
 
     
 
-    # Set larger font sizes globally for this figure
+    # Set larger font sizes globally for this figure (50% increase)
 
-    plt.rcParams.update({'font.size': 18})
+    plt.rcParams.update({'font.size': 27})
 
     
 
@@ -976,9 +976,9 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
 
     plt.plot(sorted_datetimes, sorted_values, 
 
-            linewidth=3, color='black', marker='o', 
+            linewidth=4.5, color='black', marker='o', 
 
-            markersize=6, alpha=0.9)
+            markersize=9, alpha=1.0)
 
     
 
@@ -1010,21 +1010,21 @@ def create_ground_truth_plot(all_predictions, output_path, model_name, resolutio
 
     
 
-    plt.xlabel('Datetime', fontsize=22, fontweight='bold')
+    plt.xlabel('Datetime', fontsize=33, fontweight='bold')
 
-    plt.ylabel('Capacity Factor (%)', fontsize=22, fontweight='bold')
+    plt.ylabel('Capacity Factor (%)', fontsize=33, fontweight='bold')
 
     plt.title(f'Ground Truth - {model_name} ({resolution_name})\n'
 
               f'Actual capacity factor values across all prediction intervals', 
 
-              fontsize=24, fontweight='bold')
+              fontsize=36, fontweight='bold')
 
     plt.grid(True, alpha=0.3, which='both')
 
-    plt.xticks(rotation=45, ha='right', fontsize=16)
+    plt.xticks(rotation=45, ha='right', fontsize=24)
 
-    plt.yticks(fontsize=16)
+    plt.yticks(fontsize=24)
 
     plt.tight_layout()
 
@@ -1082,9 +1082,9 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
 
     
 
-    # Set larger font sizes globally for this figure
+    # Set larger font sizes globally for this figure (50% increase)
 
-    plt.rcParams.update({'font.size': 18})
+    plt.rcParams.update({'font.size': 27})
 
     
 
@@ -1100,11 +1100,11 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
 
     # Create connected scatter plot
 
-    plt.plot(hours, rmse_values, marker='o', linewidth=2, markersize=8, 
+    plt.plot(hours, rmse_values, marker='o', linewidth=3.0, markersize=12, 
 
              color='steelblue', markerfacecolor='lightblue', markeredgecolor='darkblue', 
 
-             markeredgewidth=1.5, alpha=0.8)
+             markeredgewidth=2.25, alpha=0.9)
 
     
 
@@ -1128,21 +1128,21 @@ def create_hourly_rmse_plot(hourly_rmse_data, output_path, model_name, resolutio
 
     
 
-    plt.xlabel('Hour', fontsize=22, fontweight='bold')
+    plt.xlabel('Hour', fontsize=33, fontweight='bold')
 
-    plt.ylabel('RMSE', fontsize=22, fontweight='bold')
+    plt.ylabel('RMSE', fontsize=33, fontweight='bold')
 
     plt.title(f'Hourly RMSE Values - {model_name} ({resolution_name})\n'
 
               f'RMSE calculated for each hour across all predictions', 
 
-              fontsize=24, fontweight='bold')
+              fontsize=36, fontweight='bold')
 
     plt.grid(True, alpha=0.3, which='both')
 
-    plt.xticks(rotation=45, ha='right', fontsize=16)
+    plt.xticks(rotation=45, ha='right', fontsize=24)
 
-    plt.yticks(fontsize=16)
+    plt.yticks(fontsize=24)
 
     plt.tight_layout()
 
