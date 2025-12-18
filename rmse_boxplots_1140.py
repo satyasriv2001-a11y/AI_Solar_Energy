@@ -381,6 +381,9 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
             (15, 96, "15-minute")    # 15 minutes, 96 intervals, "15-minute"
         ]
     
+    # Store RMSE data for each resolution for summary table
+    all_rmse_data = {}
+    
     for resolution_minutes, test_intervals, resolution_name in resolutions:
         print(f"\n{'='*80}")
         print(f"PROCESSING {resolution_name.upper()} RESOLUTION")
@@ -392,6 +395,9 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
             )
             
             if len(rmse_by_datetime) > 0:
+                # Store RMSE data for summary table
+                all_rmse_data[resolution_name] = rmse_by_datetime
+                
                 # Create box plots with different grouping options
                 for group_option in [group_by] if isinstance(group_by, str) else group_by:
                     create_rmse_boxplots(rmse_by_datetime, output_dir, 
@@ -407,6 +413,51 @@ def run_rmse_boxplots(data_path, config, output_dir, resolutions=None, group_by=
             import traceback
             traceback.print_exc()
             continue
+    
+    # =============================================================================
+    # CREATE SUMMARY TABLE: Average RMSE by Resolution
+    # =============================================================================
+    print(f"\n{'='*80}")
+    print("Creating Summary Table: Average RMSE by Resolution")
+    print(f"{'='*80}")
+    
+    rmse_summary = []
+    
+    for resolution_name, rmse_by_datetime in all_rmse_data.items():
+        if len(rmse_by_datetime) > 0:
+            # Extract RMSE values (ignore datetime, just get RMSE)
+            rmse_values = [rmse for _, rmse in rmse_by_datetime]
+            rmse_values = [r for r in rmse_values if not np.isnan(r)]  # Remove NaN values
+            
+            if len(rmse_values) > 0:
+                avg_rmse = np.mean(rmse_values)
+                median_rmse = np.median(rmse_values)
+                std_rmse = np.std(rmse_values)
+                min_rmse = np.min(rmse_values)
+                max_rmse = np.max(rmse_values)
+                n_predictions = len(rmse_values)
+                
+                rmse_summary.append({
+                    'Resolution': resolution_name,
+                    'Average_RMSE': avg_rmse,
+                    'Median_RMSE': median_rmse,
+                    'Std_RMSE': std_rmse,
+                    'Min_RMSE': min_rmse,
+                    'Max_RMSE': max_rmse,
+                    'Number_of_Predictions': n_predictions
+                })
+    
+    # Save and display summary table
+    if len(rmse_summary) > 0:
+        rmse_summary_df = pd.DataFrame(rmse_summary)
+        rmse_summary_csv_path = os.path.join(output_dir, 'average_rmse_boxplot_by_resolution.csv')
+        rmse_summary_df.to_csv(rmse_summary_csv_path, index=False)
+        print(f"\n  Average RMSE Summary saved: {rmse_summary_csv_path}")
+        print(f"\n  Average RMSE by Resolution (from box plot data):")
+        print(f"  Note: Average RMSE across all prediction start times for each resolution")
+        print(rmse_summary_df.to_string(index=False))
+    else:
+        print(f"\n  [WARNING] No RMSE data available for summary table")
     
     print(f"\n{'='*80}")
     print("[SUCCESS] RMSE Box Plot Generation Completed!")
@@ -474,4 +525,5 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
