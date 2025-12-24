@@ -149,12 +149,20 @@ def find_model_directories(predictions_dir, model_filter):
     
     if model_filter == 'both':
         # Look for directories with XGB or LR in the name
-        for item in os.listdir(predictions_dir):
+        print(f"\nSearching for model directories in: {predictions_dir}")
+        all_items = os.listdir(predictions_dir)
+        print(f"  Found {len(all_items)} item(s) in base directory")
+        
+        for item in all_items:
             item_path = os.path.join(predictions_dir, item)
             if os.path.isdir(item_path):
                 detected_model = detect_model_from_path(item_path)
+                print(f"    [DIR] {item} -> detected model: {detected_model}")
                 if detected_model in ['XGB', 'LR']:
                     model_dirs.append((detected_model, item_path))
+                    print(f"      ✓ Added {detected_model} directory: {item_path}")
+            else:
+                print(f"    [FILE] {item} (skipping)")
         
         # If no model-specific directories found, check if base directory contains model indicators
         if len(model_dirs) == 0:
@@ -207,10 +215,16 @@ def load_predictions_from_dir(predictions_dir, model_name=None):
     
     # Find all plant folders (directories in predictions_dir)
     plant_folders = []
-    for item in os.listdir(predictions_dir):
+    all_items = os.listdir(predictions_dir)
+    print(f"  Scanning directory: {predictions_dir}")
+    print(f"  Found {len(all_items)} item(s) in directory")
+    
+    for item in all_items:
         item_path = os.path.join(predictions_dir, item)
         if os.path.isdir(item_path):
             plant_folders.append(item_path)
+        else:
+            print(f"    [FILE] {item} (skipping - not a directory)")
     
     plant_folders.sort()
     
@@ -224,7 +238,11 @@ def load_predictions_from_dir(predictions_dir, model_name=None):
         else:
             raise ValueError(f"No plant folders or CSV files found in {predictions_dir}")
     
-    print(f"Found {len(plant_folders)} plant folder(s)")
+    print(f"Found {len(plant_folders)} plant folder(s):")
+    for i, folder in enumerate(plant_folders[:10], 1):
+        print(f"  [{i}] {os.path.basename(folder)}")
+    if len(plant_folders) > 10:
+        print(f"  ... and {len(plant_folders) - 10} more plant folders")
     
     # Dictionary to store results: {resolution: {hour: [rmse, rmse, ...]}}
     results_by_resolution = defaultdict(lambda: defaultdict(list))
