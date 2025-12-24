@@ -4,8 +4,10 @@
 RMSE Box and Whisker Plots for All Plants - Multi-Resolution
 
 Creates box plots showing RMSE distribution across all plants for each prediction start hour.
-Plots average RMSE values for hourly, 30-min, 15-min, and 10-min resolutions.
+Plots RMSE values for hourly, 30-min, 15-min, and 10-min resolutions.
 The x-axis is the starting hour of the 24-hour sliding window (0-23), and y-axis is RMSE.
+
+Similar to rmse_boxplots_1140.py but aggregated across all plants.
 
 Usage:
     python rmse_boxplots_all_plants.py --predictions-dir /path/to/predictions --output-dir outputs/
@@ -36,8 +38,8 @@ def calculate_rmse(preds, gt):
     Calculate RMSE for a prediction window.
     
     Args:
-        preds: Predicted values (array)
-        gt: Ground truth values (array)
+        preds: Predicted capacity factor values (array)
+        gt: Ground truth capacity factor values (array)
     
     Returns:
         RMSE (float) or np.nan if insufficient valid data
@@ -108,13 +110,13 @@ def detect_resolution(df, file_path):
 
 def load_predictions_from_dir(predictions_dir):
     """
-    Load all prediction CSV files from plant directories.
+    Load all prediction CSV files from plant directories and calculate RMSE.
     
     Args:
         predictions_dir: Base directory containing plant prediction folders
     
     Returns:
-        Dictionary: {resolution_name: {plant_name: [(start_hour, rmse), ...]}}
+        Dictionary: {resolution_name: {hour: [rmse_values_from_all_plants]}}
     """
     if not os.path.exists(predictions_dir):
         raise FileNotFoundError(f"Predictions directory not found: {predictions_dir}")
@@ -134,14 +136,13 @@ def load_predictions_from_dir(predictions_dir):
         csv_files = glob.glob(os.path.join(predictions_dir, "*.csv"))
         if len(csv_files) > 0:
             print(f"[INFO] Found {len(csv_files)} CSV file(s) directly in directory")
-            # Treat the directory as a single "plant"
             plant_folders = [predictions_dir]
         else:
             raise ValueError(f"No plant folders or CSV files found in {predictions_dir}")
     
     print(f"Found {len(plant_folders)} plant folder(s)")
     
-    # Dictionary to store results: {resolution: {plant: [(hour, rmse), ...]}}
+    # Dictionary to store results: {resolution: {hour: [rmse, rmse, ...]}}
     results_by_resolution = defaultdict(lambda: defaultdict(list))
     
     # Process each plant folder
@@ -153,7 +154,6 @@ def load_predictions_from_dir(predictions_dir):
         print(f"\nProcessing plant: {plant_name}")
         
         # Find all prediction CSV files in this plant's folder
-        # Try multiple patterns
         prediction_files = []
         patterns = [
             "predictions_*.csv",
@@ -213,7 +213,6 @@ def load_predictions_from_dir(predictions_dir):
                 
                 if datetime_col is None or pred_col is None or gt_col is None:
                     print(f"    [SKIP] {os.path.basename(pred_file)}: Missing required columns")
-                    print(f"      Found columns: {list(df.columns)}")
                     continue
                 
                 # Convert datetime column to datetime
@@ -237,8 +236,8 @@ def load_predictions_from_dir(predictions_dir):
                 start_datetime = df[datetime_col].iloc[0]
                 start_hour = start_datetime.hour
                 
-                # Store result
-                results_by_resolution[resolution_name][plant_name].append((start_hour, rmse))
+                # Store result: {resolution: {hour: [rmse, rmse, ...]}}
+                results_by_resolution[resolution_name][start_hour].append(rmse)
                 processed_count += 1
                 
                 if processed_count <= 3 or processed_count % 10 == 0:
@@ -260,7 +259,7 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
     Create RMSE box and whisker plots for each resolution.
     
     Args:
-        results_by_resolution: Dictionary {resolution_name: {plant_name: [(hour, rmse), ...]}}
+        results_by_resolution: Dictionary {resolution_name: {hour: [rmse_values]}}
         output_dir: Output directory for plots
     """
     os.makedirs(output_dir, exist_ok=True)
@@ -285,38 +284,34 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
         
         resolution_data = results_by_resolution[resolution_name]
         
-        # Collect all (hour, rmse) pairs for this resolution
-        all_data = []
-        for plant_name, hour_rmse_pairs in resolution_data.items():
-            all_data.extend([(hour, rmse, plant_name) for hour, rmse in hour_rmse_pairs])
-        
-        if len(all_data) == 0:
-            print(f"  [WARNING] No data for {resolution_name}")
-            continue
-        
-        # Convert to DataFrame for easier handling
-        df = pd.DataFrame(all_data, columns=['Hour', 'RMSE', 'Plant'])
-        
-        # Group by hour and prepare data for box plot
-        hours = sorted(df['Hour'].unique())
+        # Prepare data for box plot - collect RMSE values for each hour (0-23)
+        # Show all hours 0-23 on x-axis, even if some have no data
         rmse_data_by_hour = []
-        hour_labels = []
+        hour_labels = list(range(24))  # All hours 0-23
         
         for hour in range(24):  # Hours 0-23
-            hour_data = df[df['Hour'] == hour]['RMSE'].values
-            if len(hour_data) >= 1:  # Need at least 1 data point
-                rmse_data_by_hour.append(hour_data)
-                hour_labels.append(hour)
+            if hour in resolution_data and len(resolution_data[hour]) > 0:
+                # Only include hours with at least 2 data points (for box plot to work)
+                if len(resolution_data[hour]) >= 2:
+                    rmse_data_by_hour.append(resolution_data[hour])
+                else:
+                    rmse_data_by_hour.append([])  # Too few points, show as empty
+            else:
+                # Include empty list for hours with no data (will show as empty box)
+                rmse_data_by_hour.append([])
         
-        if len(rmse_data_by_hour) == 0:
+        if len([d for d in rmse_data_by_hour if len(d) > 0]) == 0:
             print(f"  [WARNING] No valid hour data for {resolution_name}")
             continue
+        
+        # Count total predictions
+        total_rmse_values = sum(len(vals) for vals in rmse_data_by_hour)
         
         # Create box plot - larger figure for better visibility
         plt.figure(figsize=(18, 10))
         plt.rcParams.update({'font.size': 14})
         
-        # Create box plot
+        # Create box plot for all 24 hours (hours with no data will show as empty)
         bp = plt.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.7)
         
         # Color the boxes with distinct colors
@@ -331,19 +326,23 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
         for element in ['whiskers', 'fliers', 'means', 'medians', 'caps']:
             plt.setp(bp[element], color='black', linewidth=1.5)
         
-        # Format x-axis - show hours 0-23
+        # Format x-axis - show all hours 0-23
         ax = plt.gca()
-        ax.set_xlim(0.5, len(hour_labels) + 0.5)
+        ax.set_xlim(0.5, 24.5)
+        ax.set_xticks(range(24))
+        ax.set_xticklabels(range(24))
         
-        # Set y-axis to start from 0 for better comparison
-        y_min = max(0, df['RMSE'].min() * 0.9)
-        y_max = df['RMSE'].max() * 1.1
-        ax.set_ylim(y_min, y_max)
+        # Set y-axis limits - collect all RMSE values from hours with data
+        all_rmse = [val for hour_vals in rmse_data_by_hour for val in hour_vals]
+        if len(all_rmse) > 0:
+            y_min = max(0, np.min(all_rmse) * 0.9)
+            y_max = np.max(all_rmse) * 1.1
+            ax.set_ylim(y_min, y_max)
         
         plt.xlabel('Starting Hour of 24-Hour Sliding Window (0-23)', fontsize=16, fontweight='bold')
         plt.ylabel('RMSE (Capacity Factor)', fontsize=16, fontweight='bold')
         plt.title(f'RMSE Distribution Across All Plants by Prediction Start Hour - {resolution_name}\n'
-                  f'Box plot shows RMSE distribution for 24-hour forecasts starting at each hour (n={len(df)} predictions, {df["Plant"].nunique()} plants)',
+                  f'Box plot shows RMSE distribution for 24-hour forecasts starting at each hour (n={total_rmse_values} predictions)',
                   fontsize=18, fontweight='bold', pad=20)
         plt.grid(True, alpha=0.3, axis='y', linestyle='--', linewidth=0.8)
         plt.xticks(rotation=0, fontsize=13)
@@ -358,85 +357,14 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
         print(f"  Box plot saved: {output_path}")
         
         # Print statistics
+        hours_with_data = len([d for d in rmse_data_by_hour if len(d) > 0])
         print(f"  Statistics for {resolution_name}:")
-        print(f"    Total predictions: {len(df)}")
-        print(f"    Unique plants: {df['Plant'].nunique()}")
-        print(f"    Hours with data: {len(hour_labels)}")
-        print(f"    Mean RMSE: {df['RMSE'].mean():.4f}")
-        print(f"    Median RMSE: {df['RMSE'].median():.4f}")
-        print(f"    Std RMSE: {df['RMSE'].std():.4f}")
-    
-    # Optional: Create combined comparison plot with all resolutions (smaller subplots)
-    # Comment out this section if you only want individual plots
-    if len(available_resolutions) > 1:
-        print(f"\nCreating combined comparison plot with all resolutions (optional)...")
-        fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-        fig.suptitle('RMSE Distribution Across All Plants by Prediction Start Hour\n'
-                     'Comparison Across All Resolutions', 
-                     fontsize=18, fontweight='bold')
-        
-        axes = axes.flatten()
-        
-        for idx, resolution_name in enumerate(available_resolutions[:4]):  # Max 4 resolutions
-            ax = axes[idx]
-            resolution_data = results_by_resolution[resolution_name]
-            
-            # Collect all (hour, rmse) pairs
-            all_data = []
-            for plant_name, hour_rmse_pairs in resolution_data.items():
-                all_data.extend([(hour, rmse) for hour, rmse in hour_rmse_pairs])
-            
-            if len(all_data) == 0:
-                ax.text(0.5, 0.5, f'No data for\n{resolution_name}', 
-                       ha='center', va='center', fontsize=14)
-                ax.set_title(resolution_name, fontsize=14, fontweight='bold')
-                continue
-            
-            df = pd.DataFrame(all_data, columns=['Hour', 'RMSE'])
-            
-            # Group by hour
-            rmse_data_by_hour = []
-            hour_labels = []
-            
-            for hour in range(24):
-                hour_data = df[df['Hour'] == hour]['RMSE'].values
-                if len(hour_data) >= 1:
-                    rmse_data_by_hour.append(hour_data)
-                    hour_labels.append(hour)
-            
-            if len(rmse_data_by_hour) == 0:
-                ax.text(0.5, 0.5, f'No valid data for\n{resolution_name}', 
-                       ha='center', va='center', fontsize=14)
-                ax.set_title(resolution_name, fontsize=14, fontweight='bold')
-                continue
-            
-            # Create box plot
-            bp = ax.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.6)
-            
-            # Color the boxes
-            colors = plt.cm.viridis(np.linspace(0, 0.8, len(bp['boxes'])))
-            for patch, color in zip(bp['boxes'], colors):
-                patch.set_facecolor(color)
-                patch.set_alpha(0.7)
-            
-            ax.set_xlabel('Starting Hour (0-23)', fontsize=12, fontweight='bold')
-            ax.set_ylabel('RMSE', fontsize=12, fontweight='bold')
-            ax.set_title(f'{resolution_name} (n={len(df)}, plants={len(resolution_data)})', 
-                        fontsize=14, fontweight='bold')
-            ax.grid(True, alpha=0.3, axis='y')
-            ax.set_xlim(0.5, len(hour_labels) + 0.5)
-        
-        # Hide unused subplots
-        for idx in range(len(available_resolutions), 4):
-            axes[idx].axis('off')
-        
-        plt.tight_layout()
-        
-        # Save combined plot
-        combined_output_path = os.path.join(output_dir, "rmse_boxplot_all_resolutions_all_plants.png")
-        plt.savefig(combined_output_path, dpi=200, bbox_inches='tight')
-        plt.close()
-        print(f"  Combined comparison plot saved: {combined_output_path} (optional - individual plots are the main output)")
+        print(f"    Total predictions: {total_rmse_values}")
+        print(f"    Hours with data: {hours_with_data}/24")
+        if len(all_rmse) > 0:
+            print(f"    Mean RMSE: {np.mean(all_rmse):.4f}")
+            print(f"    Median RMSE: {np.median(all_rmse):.4f}")
+            print(f"    Std RMSE: {np.std(all_rmse):.4f}")
     
     # Create summary CSV
     print(f"\nCreating summary CSV...")
@@ -446,18 +374,14 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
         resolution_data = results_by_resolution[resolution_name]
         
         # Collect all data for this resolution
-        all_data = []
-        for plant_name, hour_rmse_pairs in resolution_data.items():
-            for hour, rmse in hour_rmse_pairs:
-                all_data.append({
-                    'Resolution': resolution_name,
-                    'Plant': plant_name,
-                    'Start_Hour': hour,
-                    'RMSE': rmse
-                })
-        
-        if len(all_data) > 0:
-            summary_data.extend(all_data)
+        for hour in range(24):
+            if hour in resolution_data and len(resolution_data[hour]) > 0:
+                for rmse in resolution_data[hour]:
+                    summary_data.append({
+                        'Resolution': resolution_name,
+                        'Start_Hour': hour,
+                        'RMSE': rmse
+                    })
     
     if len(summary_data) > 0:
         summary_df = pd.DataFrame(summary_data)
@@ -472,7 +396,6 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
             if len(res_df) > 0:
                 print(f"\n  {resolution_name}:")
                 print(f"    Total predictions: {len(res_df)}")
-                print(f"    Unique plants: {res_df['Plant'].nunique()}")
                 print(f"    Mean RMSE: {res_df['RMSE'].mean():.4f}")
                 print(f"    Median RMSE: {res_df['RMSE'].median():.4f}")
                 print(f"    Std RMSE: {res_df['RMSE'].std():.4f}")
@@ -521,7 +444,7 @@ Examples:
     
     try:
         # Load predictions from all plants
-        print("\n[1/2] Loading predictions from all plants...")
+        print("\n[1/2] Loading predictions from all plants and calculating RMSE...")
         results_by_resolution = load_predictions_from_dir(args.predictions_dir)
         
         if len(results_by_resolution) == 0:
@@ -543,4 +466,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

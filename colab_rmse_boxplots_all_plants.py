@@ -42,6 +42,9 @@ drive.mount('/content/drive')
 # for hourly, 30-min, 15-min, and 10-min resolutions
 # X-axis: Starting hour of 24-hour sliding window (0-23)
 # Y-axis: RMSE (Capacity Factor)
+# 
+# Each resolution gets its own high-quality plot (18x10 inches, 300 DPI)
+# with enhanced styling and statistics in the title
 
 import subprocess
 import os
@@ -61,9 +64,11 @@ OUTPUT_DIR = "/content/drive/MyDrive/Solar PV electricity/rmse_boxplots_all_plan
 print("=" * 80)
 print("RMSE Box and Whisker Plots - ALL PLANTS (Multi-Resolution)")
 print("=" * 80)
-print("Description: Creates box plots showing RMSE distribution across all plants")
+print("Description: Creates individual high-quality box plots for each resolution")
+print("             showing RMSE distribution across all plants")
 print("             for each prediction start hour (0-23)")
 print("Resolutions: Hourly, 30-minute, 15-minute, 10-minute")
+print("Plot Quality: 18x10 inches, 300 DPI, enhanced styling with statistics")
 print(f"Predictions directory: {PREDICTIONS_DIR}")
 print(f"Output directory: {OUTPUT_DIR}")
 print("=" * 80)
@@ -139,13 +144,17 @@ else:
             print("Generated Output Files:")
             print(f"{'='*80}")
             print(f"Output directory: {OUTPUT_DIR}")
-            print("\nExpected files:")
-            print("  - rmse_boxplot_hourly_all_plants.png (Hourly resolution)")
-            print("  - rmse_boxplot_30_minute_all_plants.png (30-minute resolution)")
-            print("  - rmse_boxplot_15_minute_all_plants.png (15-minute resolution)")
-            print("  - rmse_boxplot_10_minute_all_plants.png (10-minute resolution)")
-            print("  - rmse_boxplot_all_resolutions_all_plants.png (Combined comparison)")
-            print("  - rmse_summary_all_plants.csv (Summary data)")
+            print("\nOutput files (high-quality individual plots for each resolution):")
+            print("  - rmse_boxplot_hourly_all_plants.png (Hourly resolution, 18x10\", 300 DPI)")
+            print("    Shows RMSE distribution across all plants for each starting hour (0-23)")
+            print("  - rmse_boxplot_30_minute_all_plants.png (30-minute resolution, 18x10\", 300 DPI)")
+            print("    Shows RMSE distribution across all plants for each starting hour (0-23)")
+            print("  - rmse_boxplot_15_minute_all_plants.png (15-minute resolution, 18x10\", 300 DPI)")
+            print("    Shows RMSE distribution across all plants for each starting hour (0-23)")
+            print("  - rmse_boxplot_10_minute_all_plants.png (10-minute resolution, 18x10\", 300 DPI)")
+            print("    Shows RMSE distribution across all plants for each starting hour (0-23)")
+            print("\nAdditional file:")
+            print("  - rmse_summary_all_plants.csv (Summary data with all RMSE values by resolution and hour)")
             print(f"{'='*80}")
             
             # List generated files
