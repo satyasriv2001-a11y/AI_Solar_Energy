@@ -312,36 +312,48 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
             print(f"  [WARNING] No valid hour data for {resolution_name}")
             continue
         
-        # Create box plot
-        plt.figure(figsize=(16, 8))
-        plt.rcParams.update({'font.size': 12})
+        # Create box plot - larger figure for better visibility
+        plt.figure(figsize=(18, 10))
+        plt.rcParams.update({'font.size': 14})
         
         # Create box plot
-        bp = plt.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.6)
+        bp = plt.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.7)
         
-        # Color the boxes
+        # Color the boxes with distinct colors
         colors = plt.cm.viridis(np.linspace(0, 0.8, len(bp['boxes'])))
         for patch, color in zip(bp['boxes'], colors):
             patch.set_facecolor(color)
-            patch.set_alpha(0.7)
+            patch.set_alpha(0.75)
+            patch.set_edgecolor('black')
+            patch.set_linewidth(1.2)
+        
+        # Style the whiskers and medians
+        for element in ['whiskers', 'fliers', 'means', 'medians', 'caps']:
+            plt.setp(bp[element], color='black', linewidth=1.5)
         
         # Format x-axis - show hours 0-23
         ax = plt.gca()
         ax.set_xlim(0.5, len(hour_labels) + 0.5)
         
-        plt.xlabel('Starting Hour of 24-Hour Sliding Window (0-23)', fontsize=14, fontweight='bold')
-        plt.ylabel('RMSE (Capacity Factor)', fontsize=14, fontweight='bold')
+        # Set y-axis to start from 0 for better comparison
+        y_min = max(0, df['RMSE'].min() * 0.9)
+        y_max = df['RMSE'].max() * 1.1
+        ax.set_ylim(y_min, y_max)
+        
+        plt.xlabel('Starting Hour of 24-Hour Sliding Window (0-23)', fontsize=16, fontweight='bold')
+        plt.ylabel('RMSE (Capacity Factor)', fontsize=16, fontweight='bold')
         plt.title(f'RMSE Distribution Across All Plants by Prediction Start Hour - {resolution_name}\n'
-                  f'Box plot shows RMSE distribution for 24-hour forecasts starting at each hour',
-                  fontsize=16, fontweight='bold')
-        plt.grid(True, alpha=0.3, axis='y')
-        plt.xticks(rotation=0)
+                  f'Box plot shows RMSE distribution for 24-hour forecasts starting at each hour (n={len(df)} predictions, {df["Plant"].nunique()} plants)',
+                  fontsize=18, fontweight='bold', pad=20)
+        plt.grid(True, alpha=0.3, axis='y', linestyle='--', linewidth=0.8)
+        plt.xticks(rotation=0, fontsize=13)
+        plt.yticks(fontsize=13)
         plt.tight_layout()
         
-        # Save plot
+        # Save plot with high resolution
         resolution_file_name = resolution_name.lower().replace('-', '_')
         output_path = os.path.join(output_dir, f"rmse_boxplot_{resolution_file_name}_all_plants.png")
-        plt.savefig(output_path, dpi=200, bbox_inches='tight')
+        plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
         plt.close()
         print(f"  Box plot saved: {output_path}")
         
@@ -354,75 +366,77 @@ def create_rmse_boxplots(results_by_resolution, output_dir):
         print(f"    Median RMSE: {df['RMSE'].median():.4f}")
         print(f"    Std RMSE: {df['RMSE'].std():.4f}")
     
-    # Create combined plot with all resolutions
-    print(f"\nCreating combined plot with all resolutions...")
-    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    fig.suptitle('RMSE Distribution Across All Plants by Prediction Start Hour\n'
-                 'Comparison Across All Resolutions', 
-                 fontsize=18, fontweight='bold')
-    
-    axes = axes.flatten()
-    
-    for idx, resolution_name in enumerate(available_resolutions[:4]):  # Max 4 resolutions
-        ax = axes[idx]
-        resolution_data = results_by_resolution[resolution_name]
+    # Optional: Create combined comparison plot with all resolutions (smaller subplots)
+    # Comment out this section if you only want individual plots
+    if len(available_resolutions) > 1:
+        print(f"\nCreating combined comparison plot with all resolutions (optional)...")
+        fig, axes = plt.subplots(2, 2, figsize=(20, 12))
+        fig.suptitle('RMSE Distribution Across All Plants by Prediction Start Hour\n'
+                     'Comparison Across All Resolutions', 
+                     fontsize=18, fontweight='bold')
         
-        # Collect all (hour, rmse) pairs
-        all_data = []
-        for plant_name, hour_rmse_pairs in resolution_data.items():
-            all_data.extend([(hour, rmse) for hour, rmse in hour_rmse_pairs])
+        axes = axes.flatten()
         
-        if len(all_data) == 0:
-            ax.text(0.5, 0.5, f'No data for\n{resolution_name}', 
-                   ha='center', va='center', fontsize=14)
-            ax.set_title(resolution_name, fontsize=14, fontweight='bold')
-            continue
+        for idx, resolution_name in enumerate(available_resolutions[:4]):  # Max 4 resolutions
+            ax = axes[idx]
+            resolution_data = results_by_resolution[resolution_name]
+            
+            # Collect all (hour, rmse) pairs
+            all_data = []
+            for plant_name, hour_rmse_pairs in resolution_data.items():
+                all_data.extend([(hour, rmse) for hour, rmse in hour_rmse_pairs])
+            
+            if len(all_data) == 0:
+                ax.text(0.5, 0.5, f'No data for\n{resolution_name}', 
+                       ha='center', va='center', fontsize=14)
+                ax.set_title(resolution_name, fontsize=14, fontweight='bold')
+                continue
+            
+            df = pd.DataFrame(all_data, columns=['Hour', 'RMSE'])
+            
+            # Group by hour
+            rmse_data_by_hour = []
+            hour_labels = []
+            
+            for hour in range(24):
+                hour_data = df[df['Hour'] == hour]['RMSE'].values
+                if len(hour_data) >= 1:
+                    rmse_data_by_hour.append(hour_data)
+                    hour_labels.append(hour)
+            
+            if len(rmse_data_by_hour) == 0:
+                ax.text(0.5, 0.5, f'No valid data for\n{resolution_name}', 
+                       ha='center', va='center', fontsize=14)
+                ax.set_title(resolution_name, fontsize=14, fontweight='bold')
+                continue
+            
+            # Create box plot
+            bp = ax.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.6)
+            
+            # Color the boxes
+            colors = plt.cm.viridis(np.linspace(0, 0.8, len(bp['boxes'])))
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            ax.set_xlabel('Starting Hour (0-23)', fontsize=12, fontweight='bold')
+            ax.set_ylabel('RMSE', fontsize=12, fontweight='bold')
+            ax.set_title(f'{resolution_name} (n={len(df)}, plants={len(resolution_data)})', 
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            ax.set_xlim(0.5, len(hour_labels) + 0.5)
         
-        df = pd.DataFrame(all_data, columns=['Hour', 'RMSE'])
+        # Hide unused subplots
+        for idx in range(len(available_resolutions), 4):
+            axes[idx].axis('off')
         
-        # Group by hour
-        rmse_data_by_hour = []
-        hour_labels = []
+        plt.tight_layout()
         
-        for hour in range(24):
-            hour_data = df[df['Hour'] == hour]['RMSE'].values
-            if len(hour_data) >= 1:
-                rmse_data_by_hour.append(hour_data)
-                hour_labels.append(hour)
-        
-        if len(rmse_data_by_hour) == 0:
-            ax.text(0.5, 0.5, f'No valid data for\n{resolution_name}', 
-                   ha='center', va='center', fontsize=14)
-            ax.set_title(resolution_name, fontsize=14, fontweight='bold')
-            continue
-        
-        # Create box plot
-        bp = ax.boxplot(rmse_data_by_hour, labels=hour_labels, patch_artist=True, widths=0.6)
-        
-        # Color the boxes
-        colors = plt.cm.viridis(np.linspace(0, 0.8, len(bp['boxes'])))
-        for patch, color in zip(bp['boxes'], colors):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
-        
-        ax.set_xlabel('Starting Hour (0-23)', fontsize=12, fontweight='bold')
-        ax.set_ylabel('RMSE', fontsize=12, fontweight='bold')
-        ax.set_title(f'{resolution_name} (n={len(df)}, plants={len(resolution_data)})', 
-                    fontsize=14, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.set_xlim(0.5, len(hour_labels) + 0.5)
-    
-    # Hide unused subplots
-    for idx in range(len(available_resolutions), 4):
-        axes[idx].axis('off')
-    
-    plt.tight_layout()
-    
-    # Save combined plot
-    combined_output_path = os.path.join(output_dir, "rmse_boxplot_all_resolutions_all_plants.png")
-    plt.savefig(combined_output_path, dpi=200, bbox_inches='tight')
-    plt.close()
-    print(f"  Combined plot saved: {combined_output_path}")
+        # Save combined plot
+        combined_output_path = os.path.join(output_dir, "rmse_boxplot_all_resolutions_all_plants.png")
+        plt.savefig(combined_output_path, dpi=200, bbox_inches='tight')
+        plt.close()
+        print(f"  Combined comparison plot saved: {combined_output_path} (optional - individual plots are the main output)")
     
     # Create summary CSV
     print(f"\nCreating summary CSV...")
